@@ -1,6 +1,7 @@
-**NSFW Sherlock**
+# NSFW Sherlock
 
-Use this to classify images to be NSFW or not, it does not work on NSFL content
+
+API for classifying images if they are NSFW or not, it does not work on NSFL content
 
 NSFW Sherlock is powered by TensorFlow
 
