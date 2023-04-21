@@ -16,7 +16,7 @@ type Labels struct {
 
 // IsSafe returns true if the image is probably safe for work.
 func (l *Labels) IsSafe() bool {
-	return !l.NSFW(ThresholdSafe)
+	return l.NSFW(ThresholdSafe)
 }
 
 // NSFW returns true if the image is may not be safe for work.
