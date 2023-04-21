@@ -1,0 +1,25 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+*.sh
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+.idea/
+# Dependency directories (remove the comment below to include it)
+# vendor/
+*.pb.go
+.config
+cli/upload_rual
+.data
+/scripts/assets/
+/scripts/storage/
+/ts/
+assets/

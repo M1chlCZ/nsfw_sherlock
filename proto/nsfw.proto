@@ -1,0 +1,16 @@
+syntax = "proto3";
+package proto;
+option go_package = "./grpcModels";
+
+service NSFW {
+    rpc Detect (NSFWRequest) returns (NSFWResponse) {}
+}
+
+message NSFWRequest {
+    string base64 = 1;
+    string filename = 2;
+}
+
+message NSFWResponse {
+    bool nsfw = 1;
+}
