@@ -14,8 +14,8 @@ type Labels struct {
 	Sexy    float32
 }
 
-// IsSafe returns true if the image is probably safe for work.
-func (l *Labels) IsSafe() bool {
+// IsNSFW returns false if the image is probably safe for work.
+func (l *Labels) IsNSFW() bool {
 	return l.NSFW(ThresholdSafe)
 }
 

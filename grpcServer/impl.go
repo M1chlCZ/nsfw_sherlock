@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"nsfw_sherlock/common"
 	"nsfw_sherlock/grpcModels"
 	"nsfw_sherlock/utils"
 	"os"
@@ -41,12 +42,18 @@ func (s *Server) Detect(_ context.Context, req *grpcModels.NSFWRequest) (*grpcMo
 			log.Println(err.Error())
 		}
 	}()
-	isSafe, err := TestGrpc(filename)
+	isSafe, err := common.TestPictureNSFW(filename)
 	if err != nil {
 		return &grpcModels.NSFWResponse{}, err
 	}
+	isSafeText, err := common.DetectTextNSFW(filename)
+	if err != nil {
+		return &grpcModels.NSFWResponse{}, err
+	}
+	utils.ReportMessage(fmt.Sprintf("NSFW TEXT: %v", !isSafeText))
 
 	return &grpcModels.NSFWResponse{
-		Nsfw: isSafe,
+		NsfwPicture: isSafe,
+		NsfwText:    isSafeText,
 	}, nil
 }

@@ -6,21 +6,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"log"
-	"nsfw_sherlock/nsfw"
+	"nsfw_sherlock/common"
 	"nsfw_sherlock/utils"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 )
 
-var modelPath, _ = filepath.Abs("./assets/nsfw")
-var detector = nsfw.New(modelPath)
-
 func StartWebServer() {
-	test, err := Test("./pic.jpg")
+	test, err := common.TestPictureNSFW("./pic.jpg")
 	if err != nil {
 		utils.WrapErrorLog(err.Error())
 		return
@@ -39,7 +35,7 @@ func StartWebServer() {
 	app.Get("/ping", ping)
 
 	go func() {
-		err := app.Listen(fmt.Sprintf(":%d", 7700))
+		err := app.Listen(fmt.Sprintf(":%d", 4000))
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
@@ -96,7 +92,7 @@ func picCheck(c *fiber.Ctx) error {
 			log.Println(err.Error())
 		}
 	}()
-	isSafe, err := Test(filename)
+	isSafe, err := common.TestPictureNSFW(filename)
 	if err != nil {
 		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
 	}
@@ -106,22 +102,4 @@ func picCheck(c *fiber.Ctx) error {
 		"message": "success",
 		"isSafe":  isSafe,
 	})
-}
-
-func Test(filename string) (bool, error) {
-	l, err := detect(filename)
-	if err != nil {
-		return false, err
-	}
-	return l.IsSafe(), nil
-}
-
-func detect(filename string) (nsfw.Labels, error) {
-	result, err := detector.File(filename)
-	if err != nil {
-		log.Fatalln(err.Error())
-		return result, err
-	}
-
-	return result, nil
 }

@@ -8,6 +8,11 @@ RUN apt-get update && apt-get install -y \
      gcc \
      build-essential
 
+RUN apt-get update -qq
+RUN apt-get install -y -qq libtesseract-dev libleptonica-dev
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
+RUN apt-get install -y -qq tesseract-ocr-eng
+
 # Download and install TensorFlow C library
 RUN wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.9.1.tar.gz && \
     tar -C /usr -xzf libtensorflow-cpu-linux-x86_64-2.9.1.tar.gz && \
@@ -32,8 +37,15 @@ RUN go mod tidy && \
 #Use the official TensorFlow image as the base image
 FROM ubuntu:22.04
 
+# Install required dependencies
+RUN apt-get update -qq
+RUN apt-get install -y -qq libtesseract-dev libleptonica-dev
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
+RUN apt-get install -y -qq tesseract-ocr-eng
+
 COPY --from=builder /app/main .
-COPY --from=builder /app/pic.jpg .
+COPY --from=builder /app/pic2.png .
+COPY --from=builder /app/bad_words.txt .
 COPY --from=builder /app/assets/nsfw /assets/nsfw
 COPY --from=builder /app/assets/temp /assets/temp
 

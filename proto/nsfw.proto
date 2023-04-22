@@ -12,5 +12,6 @@ message NSFWRequest {
 }
 
 message NSFWResponse {
-    bool nsfw = 1;
+    bool nsfwPicture = 1;
+    bool nsfwText = 2;
 }

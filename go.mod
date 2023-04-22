@@ -7,6 +7,7 @@ require (
 	github.com/galeone/tfgo v0.0.0-20230214145115-56cedbc50978
 	github.com/gofiber/fiber/v2 v2.44.0
 	github.com/joho/godotenv v1.5.1
+	github.com/otiai10/gosseract/v2 v2.4.0
 	github.com/photoprism/photoprism v0.0.0-20230421113227-8a06a577f3aa
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
