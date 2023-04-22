@@ -36,8 +36,11 @@ WORKDIR /app
 # Copy the Go project files into the container
 COPY . .
 
-# Compile the .proto files
+# Create the required directories
 RUN mkdir -p grpcModels
+RUN mkdir -p assets/temp
+
+# Compile the .proto files
 RUN cd ./proto && \
     protoc --go_out=../grpcModels --go_opt=paths=source_relative --go-grpc_out=../grpcModels --go-grpc_opt=paths=source_relative *.proto
 
