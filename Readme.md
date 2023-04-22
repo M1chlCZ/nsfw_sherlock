@@ -1,5 +1,5 @@
 # NSFW Sherlock
-__Build with GO, TensorFlow and good luck__
+__Build with GO, TensorFlow and luck__
 ###
 API for classifying images for NSFW content.
 
@@ -9,7 +9,7 @@ It can determine if picture is NSFW as well as if text on picture is NSFW
 
 __Both HTTP and GRPC APIs are supported__
 
-Use docker to run this, otherwise good luck 🫡
+Use docker to run this, strongly recommended
 
 
 ### 
