@@ -5,6 +5,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"net"
+	"nsfw_sherlock/common"
 	"nsfw_sherlock/grpcModels"
 	"nsfw_sherlock/utils"
 )
@@ -17,11 +18,12 @@ func StartGrpcServer() {
 	//}
 	//utils.ReportSuccess(fmt.Sprintf("NSFW PIC: %v", test))
 	//
-	//err = common.LoadBadWords()
-	//if err != nil {
-	//	utils.WrapErrorLog(err.Error())
-	//	return
-	//}
+	err := common.LoadBadWords()
+	if err != nil {
+		utils.WrapErrorLog(err.Error())
+		return
+	}
+
 	//isSafeText, err := common.DetectTextNSFW("./pic2.png")
 	//if err != nil {
 	//	utils.WrapErrorLog(err.Error())

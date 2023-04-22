@@ -67,16 +67,12 @@ func containsBadWords(text string) []string {
 	words := strings.Fields(filteredText)
 
 	// Create a map of bad words for faster lookups
-	badWordsMap := make(map[string]bool)
-	for _, badWord := range BadWords {
-		badWordsMap[badWord] = true
-	}
 
 	// Compare the words with the list of bad words
 	var badWordsFound []string
 	for _, word := range words {
 		utils.ReportSuccess("Checking word: " + word)
-		if badWordsMap[word] {
+		if BadWordsMap[word] {
 			utils.ReportMessage("Bad word found: " + word)
 			badWordsFound = append(badWordsFound, word)
 		}

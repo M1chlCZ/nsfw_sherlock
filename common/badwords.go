@@ -5,9 +5,10 @@ import (
 	"os"
 )
 
-var BadWords []string
+var BadWordsMap map[string]bool
 
 func LoadBadWords() error {
+	var BadWords []string
 	BadWords = make([]string, 0)
 	file, err := os.Open("./bad_words.txt")
 	if err != nil {
@@ -20,6 +21,10 @@ func LoadBadWords() error {
 	}
 	if err := scanner.Err(); err != nil {
 		return err
+	}
+	badWordsMap := make(map[string]bool)
+	for _, badWord := range BadWords {
+		badWordsMap[badWord] = true
 	}
 	return nil
 }
