@@ -2,6 +2,7 @@ package common
 
 import (
 	"bufio"
+	"fmt"
 	"nsfw_sherlock/utils"
 	"os"
 )
@@ -27,6 +28,6 @@ func LoadBadWords() error {
 	for _, badWord := range BadWords {
 		badWordsMap[badWord] = true
 	}
-	utils.ReportMessage("Bad word loaded, length: " + string(rune(len(badWordsMap))))
+	utils.ReportMessage(fmt.Sprintf("Bad word loaded, length: %d", len(badWordsMap)))
 	return nil
 }
