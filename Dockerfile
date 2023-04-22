@@ -13,6 +13,12 @@ RUN apt-get install -y -qq libtesseract-dev libleptonica-dev
 ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
 RUN apt-get install -y -qq tesseract-ocr-eng
 
+# Install protobuf compiler and gRPC plugins
+RUN apt-get update && apt-get install -y protobuf-compiler
+RUN go get google.golang.org/protobuf/cmd/protoc-gen-go@v1.27.1
+RUN go get google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
+RUN mv /go/bin/protoc-gen-go* /usr/local/bin/
+
 # Download and install TensorFlow C library
 RUN wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.9.1.tar.gz && \
     tar -C /usr -xzf libtensorflow-cpu-linux-x86_64-2.9.1.tar.gz && \
@@ -29,6 +35,10 @@ WORKDIR /app
 
 # Copy the Go project files into the container
 COPY . .
+
+# Compile the .proto files
+RUN cd ./proto && \
+    protoc --go_out=../grpcModels --go_opt=paths=source_relative --go-grpc_out=../grpcModels --go-grpc_opt=paths=source_relative *.proto
 
 # Build the Go project
 RUN go mod tidy && \
