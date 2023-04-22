@@ -28,3 +28,7 @@ func LoadBadWords() error {
 	}
 	return nil
 }
+
+func getBadWordsList() map[string]bool {
+	return BadWordsMap
+}
