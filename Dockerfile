@@ -44,7 +44,7 @@ ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
 RUN apt-get install -y -qq tesseract-ocr-eng
 
 COPY --from=builder /app/main .
-COPY --from=builder /app/pic2.png .
+COPY --from=builder /app/pic.jpg .
 COPY --from=builder /app/bad_words.txt .
 COPY --from=builder /app/assets/nsfw /assets/nsfw
 COPY --from=builder /app/assets/temp /assets/temp
