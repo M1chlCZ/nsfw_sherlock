@@ -5,7 +5,11 @@ import (
 	"os"
 )
 
-var BadWordsMap map[string]bool
+type BadWordsMap struct {
+	BadWordsMap map[string]bool
+}
+
+var BadWordsStuff *BadWordsMap
 
 func LoadBadWords() error {
 	var BadWords []string
@@ -26,9 +30,12 @@ func LoadBadWords() error {
 	for _, badWord := range BadWords {
 		badWordsMap[badWord] = true
 	}
+	BadWordsStuff = &BadWordsMap{
+		BadWordsMap: badWordsMap,
+	}
 	return nil
 }
 
-func getBadWordsList() map[string]bool {
-	return BadWordsMap
+func GetBadWordsList() *BadWordsMap {
+	return BadWordsStuff
 }
