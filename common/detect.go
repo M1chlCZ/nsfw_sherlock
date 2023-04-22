@@ -66,7 +66,9 @@ func containsBadWords(text string) []string {
 	// Split the text into words
 	words := strings.Fields(filteredText)
 
-	// Create a map of bad words for faster lookups
+	for v, k := range BadWordsMap {
+		utils.ReportMessage(fmt.Sprintf("%s%v", v, k))
+	}
 
 	// Compare the words with the list of bad words
 	var badWordsFound []string
