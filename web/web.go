@@ -16,16 +16,21 @@ import (
 )
 
 func StartWebServer() {
-	//test, err := common.TestPictureNSFW("./pic.jpg")
-	//if err != nil {
-	//	utils.WrapErrorLog(err.Error())
-	//	return
-	//}
-	err := common.LoadBadWords()
+	// Dry run for TF
+	test, err := common.TestPictureNSFW("./pic.jpg")
+	if err != nil {
+		utils.WrapErrorLog(err.Error())
+		return
+	}
+	utils.ReportSuccess(fmt.Sprintf("NSFW PIC: %v", test))
+
+	//Load bad words
+	err = common.LoadBadWords()
 	if err != nil {
 		utils.WrapErrorLog("Can't load bad words")
 		return
 	}
+
 	app := fiber.New(fiber.Config{
 		AppName:       "NSFW Detector API",
 		StrictRouting: false,

@@ -68,13 +68,10 @@ func containsBadWords(text string) []string {
 
 	// Compare the words with the list of bad words
 	mapBad := GetBadWordsList()
-	utils.ReportSuccess(fmt.Sprintf("Bad words list: %d", len(mapBad.BadWordsMap)))
 
 	var badWordsFound []string
 	for _, word := range words {
-		utils.ReportSuccess("Checking word: " + word)
 		if mapBad.BadWordsMap[word] {
-			utils.ReportMessage("Bad word found: " + word)
 			badWordsFound = append(badWordsFound, word)
 		}
 	}

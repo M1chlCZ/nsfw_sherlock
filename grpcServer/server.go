@@ -11,25 +11,20 @@ import (
 )
 
 func StartGrpcServer() {
-	//test, err := common.TestPictureNSFW("./pic2.png")
-	//if err != nil {
-	//	utils.WrapErrorLog(err.Error())
-	//	return
-	//}
-	//utils.ReportSuccess(fmt.Sprintf("NSFW PIC: %v", test))
-	//
-	err := common.LoadBadWords()
+	// Dry run for TF
+	test, err := common.TestPictureNSFW("./pic.jpg")
 	if err != nil {
 		utils.WrapErrorLog(err.Error())
 		return
 	}
+	utils.ReportSuccess(fmt.Sprintf("NSFW PIC: %v", test))
 
-	//isSafeText, err := common.DetectTextNSFW("./pic2.png")
-	//if err != nil {
-	//	utils.WrapErrorLog(err.Error())
-	//	return
-	//}
-	//utils.ReportSuccess(fmt.Sprintf("NSFW TEXT: %v", isSafeText))
+	//Load bad words
+	err = common.LoadBadWords()
+	if err != nil {
+		utils.WrapErrorLog("Can't load bad words")
+		return
+	}
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", 4000))
 	if err != nil {
