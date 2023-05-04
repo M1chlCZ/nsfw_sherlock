@@ -40,7 +40,7 @@ func StartWebServer() {
 	})
 	app.Use(cors.New())
 
-	app.Get("/pic/check", picCheck)
+	app.Post("/pic/check", picCheck)
 	app.Get("/ping", ping)
 
 	go func() {
