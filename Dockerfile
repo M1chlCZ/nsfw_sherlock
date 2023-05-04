@@ -77,4 +77,4 @@ ENV LD_LIBRARY_PATH /usr/local/lib
 
 LABEL authors="M1chl"
 
-ENTRYPOINT ["./main"]
+CMD ["./main"]
