@@ -2,6 +2,7 @@ package common
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 )
 
@@ -16,7 +17,14 @@ func LoadBadWords() error {
 	BadWords = make([]string, 0)
 	file, err := os.Open("./bad_words.txt")
 	if err != nil {
-		return err
+		file, err = os.Open("./bad_words_fallback.txt")
+		if err != nil {
+			fmt.Println("Can't open bad words file: ", err.Error())
+			return err
+		}
+		fmt.Println("Loaded bad words from bad_words_fallback.txt")
+	} else {
+		fmt.Println("Loaded bad words from bad_words.txt")
 	}
 	defer file.Close()
 	scanner := bufio.NewScanner(file)

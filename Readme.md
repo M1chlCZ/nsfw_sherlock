@@ -19,7 +19,6 @@ __Usage:__
 
     git clone https://github.com/M1chlCZ/nsfw_sherlock nsfw_sherlock
     cd nsfw_sherlock
-    bash nsfw_model
     docker build -t nsfwsherlock .
 
     GRPC:
@@ -29,6 +28,9 @@ __Usage:__
     HTTP:
     docker run -e APP_ENV=http -p 4000:4000 nsfwsherlock
     (POST /pic/check)
+
+    LOADING YOUR BAD WORDS DICT:
+    docker run -e APP_ENV=grpc  -v /path/to/your/host/bad_words.txt:/bad_words.txt -p 4000:4000 nsfwsherlock
 
 #
 __Credits:__

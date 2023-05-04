@@ -8,13 +8,10 @@ RUN apt-get update && apt-get install -y \
      gcc \
      build-essential
 
-RUN apt-get update -qq
 RUN apt-get install -y -qq libtesseract-dev libleptonica-dev
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
-RUN apt-get install -y -qq tesseract-ocr-eng
 
 # Install protobuf compiler and gRPC plugins
-RUN apt-get update && apt-get install -y protobuf-compiler
+RUN apt-get install -y protobuf-compiler
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
 RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 RUN mv /go/bin/protoc-gen-go* /usr/local/bin/
@@ -36,6 +33,15 @@ WORKDIR /app
 # Copy the Go project files into the container
 COPY . .
 
+# Copy the nsfw_model script into the container
+COPY nsfw_model /app/nsfw_model
+
+# Make the nsfw_model script executable
+RUN chmod +x /app/nsfw_model
+
+# Download NSFW Tensoflow model
+RUN /app/nsfw_model
+
 # Create the required directories
 RUN mkdir -p grpcModels
 RUN mkdir -p assets/temp
@@ -49,7 +55,7 @@ RUN go mod tidy && \
     go build -o main .
 
 #Use the official TensorFlow image as the base image
-FROM ubuntu:22.04
+FROM debian:stable-slim
 
 # Install required dependencies
 RUN apt-get update -qq
@@ -59,7 +65,7 @@ RUN apt-get install -y -qq tesseract-ocr-eng
 
 COPY --from=builder /app/main .
 COPY --from=builder /app/pic.jpg .
-COPY --from=builder /app/bad_words.txt .
+COPY --from=builder /app/bad_words_fallback.txt .
 COPY --from=builder /app/assets/nsfw /assets/nsfw
 COPY --from=builder /app/assets/temp /assets/temp
 
