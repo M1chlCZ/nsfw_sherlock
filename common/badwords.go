@@ -2,7 +2,7 @@ package common
 
 import (
 	"bufio"
-	"fmt"
+	"nsfw_sherlock/utils"
 	"os"
 )
 
@@ -19,12 +19,12 @@ func LoadBadWords() error {
 	if err != nil {
 		file, err = os.Open("./bad_words_fallback.txt")
 		if err != nil {
-			fmt.Println("Can't open bad words file: ", err.Error())
+			utils.WrapErrorLogF("Can't open bad words file: ", err.Error())
 			return err
 		}
-		fmt.Println("Loaded bad words from bad_words_fallback.txt")
+		utils.ReportMessage("Loaded bad words from bad_words_fallback.txt")
 	} else {
-		fmt.Println("Loaded bad words from bad_words.txt")
+		utils.ReportMessage("Loaded bad words from bad_words.txt")
 	}
 	defer file.Close()
 	scanner := bufio.NewScanner(file)

@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
      wget \
      git \
      gcc \
+    unzip \
      build-essential
 
 RUN apt-get install -y -qq libtesseract-dev libleptonica-dev
@@ -33,18 +34,16 @@ WORKDIR /app
 # Copy the Go project files into the container
 COPY . .
 
-# Copy the nsfw_model script into the container
-COPY nsfw_model /app/nsfw_model
-
-# Make the nsfw_model script executable
-RUN chmod +x /app/nsfw_model
-
-# Download NSFW Tensoflow model
-RUN /app/nsfw_model
-
 # Create the required directories
 RUN mkdir -p grpcModels
 RUN mkdir -p assets/temp
+RUN mkdir -p assets/nsfw
+
+# Make the nsfw_model script executable
+RUN chmod +x ./nsfw_model
+
+# Download NSFW Tensoflow model
+RUN ./nsfw_model
 
 # Compile the .proto files
 RUN cd ./proto && \
