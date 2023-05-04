@@ -106,9 +106,15 @@ func picCheck(c *fiber.Ctx) error {
 		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
 	}
 
+	isSafeText, err := common.DetectTextNSFW(filename)
+	if err != nil {
+		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
+	}
+
 	return c.JSON(fiber.Map{
-		"status":  "ok",
-		"message": "success",
-		"isSafe":  isSafe,
+		"status":   "ok",
+		"message":  "success",
+		"nsfwText": isSafeText,
+		"nsfwPic":  isSafe,
 	})
 }
