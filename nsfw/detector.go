@@ -2,9 +2,12 @@ package nsfw
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/galeone/tensorflow/tensorflow/go/op"
 	"github.com/photoprism/photoprism/pkg/fs"
+	"golang.org/x/image/webp"
+	"image/jpeg"
 	"log"
 	"nsfw_sherlock/utils"
 	"os"
@@ -182,6 +185,10 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 }
 
 func createTensorFromImage(image []byte, imageFormat string) (*tf.Tensor, error) {
+	if imageFormat == "webp" {
+		image = webpToJpeg(image)
+		imageFormat = "jpeg"
+	}
 	tensor, err := tf.NewTensor(string(image))
 	if err != nil {
 		return nil, err
@@ -203,4 +210,17 @@ func createTensorFromImage(image []byte, imageFormat string) (*tf.Tensor, error)
 		return nil, err
 	}
 	return normalized[0], nil
+}
+
+func webpToJpeg(image []byte) []byte {
+	img, err := webp.Decode(bytes.NewReader(image))
+	if err != nil {
+		return image
+	}
+	buf := new(bytes.Buffer)
+	err = jpeg.Encode(buf, img, nil)
+	if err != nil {
+		return image
+	}
+	return buf.Bytes()
 }
