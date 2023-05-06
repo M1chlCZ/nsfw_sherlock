@@ -3,7 +3,6 @@ __Build with GO, TensorFlow and luck__
 
 [![License: AGPL](https://img.shields.io/badge/license-AGPL-blue.svg)](https://)
 [![Go Report Card](https://goreportcard.com/badge/github.com/M1chlCZ/nsfw_sherlock)](https://goreportcard.com/report/github.com/M1chlCZ/nsfw_sherlock)
-[![GitHub Discussions](https://img.shields.io/badge/ask-%20on%20github-4d6a91.svg)](https://github.com/github.com/M1chlCZ/nsfw_sherlock/wiki)
 [![GoDoc](https://godoc.org/github.com/M1chlCZ/nsfw_sherlock?status.svg)](https://godoc.org/github.com/M1chlCZ/nsfw_sherlock)
 ###
 API for classifying images for NSFW content.
