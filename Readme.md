@@ -1,5 +1,12 @@
 # NSFW Sherlock
 __Build with GO, TensorFlow and luck__
+
+[![License: AGPL](https://img.shields.io/badge/license-AGPL-blue.svg)](https://)
+[![Go Report Card](https://goreportcard.com/badge/github.com/M1chlCZ/nsfw_sherlock)](https://goreportcard.com/report/github.com/M1chlCZ/nsfw_sherlock)
+[![Build Status](https://travis-ci.org/M1chlCZ/nsfw_sherlock.svg?branch=master)](https://travis-ci.org/M1chlCZ/nsfw_sherlock)
+[![codecov](https://codecov.io/gh/M1chlCZ/nsfw_sherlock/branch/master/graph/badge.svg)](https://codecov.io/gh/M1chlCZ/nsfw_sherlock)
+[![GoDoc](https://godoc.org/github.com/M1chlCZ/nsfw_sherlock?status.svg)](https://godoc.org/github.com/M1chlCZ/nsfw_sherlock)
+[![Docker Pulls](https://img.shields.io/docker/pulls/m1ch1cz/nsfwsherlock.svg)](https://hub.docker.com/r/m1ch1cz/nsfwsherlock/)
 ###
 API for classifying images for NSFW content.
 
