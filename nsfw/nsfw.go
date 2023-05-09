@@ -21,12 +21,12 @@ func (l *Labels) IsNSFW() bool {
 
 // NSFW returns true if the image is may not be safe for work.
 func (l *Labels) NSFW(threshold float32) bool {
-	if l.Porn > threshold || l.Sexy > 0.01 || l.Hentai > 0.15 {
-		return true
+	if l.Neutral > 0.35 {
+		return false
 	}
 
-	if l.Neutral > 0.25 {
-		return false
+	if l.Porn > threshold || l.Sexy > 0.01 || l.Hentai > 0.15 {
+		return true
 	}
 
 	return false
