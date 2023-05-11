@@ -25,7 +25,7 @@ func (l *Labels) NSFW(threshold float32) bool {
 		return false
 	}
 
-	if l.Porn > threshold {
+	if l.Porn > 0.01 {
 		return true
 	} else if l.Sexy > 0.01 {
 		return true
