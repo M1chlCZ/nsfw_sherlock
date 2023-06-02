@@ -45,6 +45,8 @@ func (s *Server) Detect(_ context.Context, req *grpcModels.NSFWRequest) (*grpcMo
 	isSafe, err := common.TestPictureNSFW(filename)
 	if err != nil {
 		return &grpcModels.NSFWResponse{}, err
+	} else {
+		utils.ReportSuccess(fmt.Sprintf("NSFW PIC: %v", isSafe))
 	}
 	isSafeText, err := common.DetectTextNSFW(filename)
 	if err != nil {
