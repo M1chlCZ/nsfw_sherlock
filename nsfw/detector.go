@@ -149,7 +149,7 @@ func (t *Detector) getLabels(p []float32) Labels {
 func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.Output, err error) {
 	const (
 		H, W  = 448, 448
-		Mean  = float32(118)
+		Mean  = float32(117)
 		Scale = float32(1)
 	)
 	s := op.NewScope()
