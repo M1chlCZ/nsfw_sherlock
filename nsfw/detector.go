@@ -62,10 +62,10 @@ func (t *Detector) Labels(img []byte, filetype string) (result Labels, err error
 	// Run inference
 	output, err := t.model.Session.Run(
 		map[tf.Output]*tf.Tensor{
-			t.model.Graph.Operation("input_tensor").Output(0): tensor,
+			t.model.Graph.Operation("serving_default_input").Output(0): tensor,
 		},
 		[]tf.Output{
-			t.model.Graph.Operation("nsfw_cls_model/final_prediction").Output(0),
+			t.model.Graph.Operation("StatefulPartitionedCall").Output(0),
 		},
 		nil)
 
