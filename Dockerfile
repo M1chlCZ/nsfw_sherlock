@@ -39,11 +39,9 @@ RUN mkdir -p grpcModels
 RUN mkdir -p assets/temp
 RUN mkdir -p assets/nsfw
 
-# Make the nsfw_model script executable
-RUN chmod +x ./nsfw_model
+RUN wget -q https://github.com/GantMan/nsfw_model/releases/download/1.1.0/nsfw_mobilenet_v2_140_224.zip
 
-# Download NSFW Tensoflow model
-RUN ./nsfw_model
+RUN unzip nsfw_mobilenet_v2_140_224.zip && mv mobilenet_v2_140_224/* /app/assets/nsfw/ && rm -r mobilenet_v2_140_224 nsfw_mobilenet_v2_140_224.zip
 
 # Compile the .proto files
 RUN cd ./proto && \
