@@ -41,7 +41,7 @@ __Usage:__
 #
 __Credits:__
 
-    Model, snippets of logic: https://github.com/photoprism/photoprism
+    Model: https://github.com/GantMan/nsfw_model
 
     Tensorflow-GO: https://github.com/galeone/tfgo
 

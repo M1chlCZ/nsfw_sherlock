@@ -31,6 +31,8 @@ func (l *Labels) NSFW(threshold float32) bool {
 		return true
 	} else if l.Hentai > 0.75 {
 		return true
+	} else if l.Drawing > 0.75 {
+		return false
 	} else {
 		return false
 	}
