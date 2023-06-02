@@ -65,6 +65,7 @@ COPY --from=builder /app/pic.jpg .
 COPY --from=builder /app/bad_words_fallback.txt .
 COPY --from=builder /app/assets/nsfw /assets/nsfw
 COPY --from=builder /app/assets/temp /assets/temp
+COPY --from=builder /app/labels.txt /assets/nsfw/labels.txt
 
 COPY --from=builder /usr/lib/libtensorflow.so.2 /usr/local/lib/
 COPY --from=builder /usr/lib/libtensorflow_framework.so.2 /usr/local/lib/
