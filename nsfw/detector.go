@@ -185,7 +185,7 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 }
 
 func createTensorFromImage(image []byte, imageFormat string) (*tf.Tensor, error) {
-	if imageFormat == "png" {
+	if imageFormat == "webp" {
 		image = webpToPng(image)
 		imageFormat = "png"
 	}
