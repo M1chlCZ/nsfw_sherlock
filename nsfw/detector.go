@@ -7,7 +7,7 @@ import (
 	"github.com/galeone/tensorflow/tensorflow/go/op"
 	"github.com/photoprism/photoprism/pkg/fs"
 	"golang.org/x/image/webp"
-	"image/jpeg"
+	"image/png"
 	"log"
 	"nsfw_sherlock/utils"
 	"os"
@@ -161,9 +161,9 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 	} else if imageFormat == "gif" {
 		decode = op.DecodeGif(s, input)
 	} else if imageFormat == "bmp" {
-		decode = op.DecodeBmp(s, input, op.DecodeBmpChannels(4))
+		decode = op.DecodeBmp(s, input, op.DecodeBmpChannels(3))
 	} else if imageFormat == "jpeg" || imageFormat == "jpg" {
-		decode = op.DecodeJpeg(s, input, op.DecodeJpegChannels(4))
+		decode = op.DecodeJpeg(s, input, op.DecodeJpegChannels(3))
 	} else {
 		return nil, tf.Output{}, tf.Output{}, fmt.Errorf("image format not supported: %s", imageFormat)
 	}
@@ -185,9 +185,9 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 }
 
 func createTensorFromImage(image []byte, imageFormat string) (*tf.Tensor, error) {
-	if imageFormat == "webp" {
-		image = webpToJpeg(image)
-		imageFormat = "jpeg"
+	if imageFormat == "png" {
+		image = webpToPng(image)
+		imageFormat = "png"
 	}
 	tensor, err := tf.NewTensor(string(image))
 	if err != nil {
@@ -212,13 +212,13 @@ func createTensorFromImage(image []byte, imageFormat string) (*tf.Tensor, error)
 	return normalized[0], nil
 }
 
-func webpToJpeg(image []byte) []byte {
+func webpToPng(image []byte) []byte {
 	img, err := webp.Decode(bytes.NewReader(image))
 	if err != nil {
 		return image
 	}
 	buf := new(bytes.Buffer)
-	err = jpeg.Encode(buf, img, nil)
+	err = png.Encode(buf, img)
 	if err != nil {
 		return image
 	}
