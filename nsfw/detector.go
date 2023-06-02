@@ -157,13 +157,13 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 	// Decode PNG or JPEG
 	var decode tf.Output
 	if imageFormat == "png" {
-		decode = op.DecodePng(s, input, op.DecodePngChannels(3))
+		decode = op.DecodePng(s, input, op.DecodePngChannels(0))
 	} else if imageFormat == "gif" {
 		decode = op.DecodeGif(s, input)
 	} else if imageFormat == "bmp" {
-		decode = op.DecodeBmp(s, input, op.DecodeBmpChannels(3))
+		decode = op.DecodeBmp(s, input, op.DecodeBmpChannels(0))
 	} else if imageFormat == "jpeg" || imageFormat == "jpg" {
-		decode = op.DecodeJpeg(s, input, op.DecodeJpegChannels(3))
+		decode = op.DecodeJpeg(s, input, op.DecodeJpegChannels(0))
 	} else {
 		return nil, tf.Output{}, tf.Output{}, fmt.Errorf("image format not supported: %s", imageFormat)
 	}
