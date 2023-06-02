@@ -9,8 +9,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/otiai10/gosseract/v2 v2.4.0
 	github.com/photoprism/photoprism v0.0.0-20230421113227-8a06a577f3aa
+	golang.org/x/image v0.7.0
 	google.golang.org/grpc v1.54.0
-	google.golang.org/protobuf v1.30.0
 )
 
 require (
@@ -32,9 +32,9 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.45.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/image v0.7.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	google.golang.org/genproto v0.0.0-20230110181048-76db0878b65f // indirect
+	google.golang.org/protobuf v1.30.0 // indirect
 )

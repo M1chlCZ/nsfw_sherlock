@@ -42,20 +42,20 @@ func (s *Server) Detect(_ context.Context, req *grpcModels.NSFWRequest) (*grpcMo
 			log.Println(err.Error())
 		}
 	}()
-	isSafe, err := common.TestPictureNSFW(filename)
+	isNSFW, err := common.TestPictureNSFW(filename)
 	if err != nil {
 		return &grpcModels.NSFWResponse{}, err
 	} else {
-		utils.ReportSuccess(fmt.Sprintf("NSFW PIC: %v", isSafe))
+		utils.ReportSuccess(fmt.Sprintf("NSFW PIC: %v", isNSFW))
 	}
-	isSafeText, err := common.DetectTextNSFW(filename)
+	isNSFWText, err := common.DetectTextNSFW(filename)
 	if err != nil {
 		return &grpcModels.NSFWResponse{}, err
 	}
-	utils.ReportMessage(fmt.Sprintf("NSFW TEXT: %v", isSafeText))
+	utils.ReportMessage(fmt.Sprintf("NSFW TEXT: %v", isNSFWText))
 
 	return &grpcModels.NSFWResponse{
-		NsfwPicture: isSafe,
-		NsfwText:    isSafeText,
+		NsfwPicture: isNSFW,
+		NsfwText:    isNSFWText,
 	}, nil
 }
