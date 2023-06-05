@@ -1,11 +1,11 @@
 # NSFW Sherlock
-__Build with GO, TensorFlow and luck__
+__Build with GO and TensorFlow__
 
 [![License: AGPL](https://img.shields.io/badge/license-AGPL-blue.svg)](https://)
 [![Go Report Card](https://goreportcard.com/badge/github.com/M1chlCZ/nsfw_sherlock)](https://goreportcard.com/report/github.com/M1chlCZ/nsfw_sherlock)
 [![GoDoc](https://godoc.org/github.com/M1chlCZ/nsfw_sherlock?status.svg)](https://godoc.org/github.com/M1chlCZ/nsfw_sherlock)
 ###
-API for classifying images for NSFW content.
+Simple drop-in API for classifying images for NSFW content.
 
 It can determine if picture is NSFW as well as if text on picture is NSFW
 
