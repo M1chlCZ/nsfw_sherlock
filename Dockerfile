@@ -18,10 +18,10 @@ RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 RUN mv /go/bin/protoc-gen-go* /usr/local/bin/
 
 # Download and install TensorFlow C library
-RUN wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.9.1.tar.gz && \
-    tar -C /usr -xzf libtensorflow-cpu-linux-x86_64-2.9.1.tar.gz && \
+RUN wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz && \
+    tar -C /usr -xzf libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz && \
     ldconfig && \
-    rm libtensorflow-cpu-linux-x86_64-2.9.1.tar.gz
+    rm libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz
 
 # Set the environment variables to help the Go compiler find the TensorFlow C library
 ENV LD_LIBRARY_PATH /usr/local/lib
