@@ -69,6 +69,10 @@ COPY --from=builder /app/labels.txt /assets/nsfw/labels.txt
 
 COPY --from=builder /usr/lib/libtensorflow_framework.so.2.11.0 /usr/local/lib/
 COPY --from=builder /usr/lib/libtensorflow.so.2.11.0 /usr/local/lib/
+COPY --from=builder /usr/lib/libtensorflow.so.2 /usr/local/lib/
+COPY --from=builder /usr/lib/libtensorflow.so.2 /usr/local/lib/libtensorflow.so.4
+COPY --from=builder /usr/lib/libtensorflow_framework.so.2 /usr/local/lib/
+COPY --from=builder /usr/lib/libtensorflow_framework.so.2 /usr/local/lib/libtensorflow_framework.so.4
 
 # Set the environment variables to help the runtime find the TensorFlow C library
 ENV LD_LIBRARY_PATH /usr/local/lib
