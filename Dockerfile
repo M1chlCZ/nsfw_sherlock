@@ -52,7 +52,7 @@ RUN go mod tidy && \
     go build -o main .
 
 #Use the official TensorFlow image as the base image
-FROM debian:stable-slim
+FROM ubuntu:latest
 
 # Install required dependencies
 RUN apt-get update -qq
@@ -67,14 +67,11 @@ COPY --from=builder /app/assets/nsfw /assets/nsfw
 COPY --from=builder /app/assets/temp /assets/temp
 COPY --from=builder /app/labels.txt /assets/nsfw/labels.txt
 
-RUN wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz && \
-    tar -C /usr -xzf libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz && \
-    ldconfig && \
-    rm libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz
+COPY --from=builder /usr/lib/libtensorflow.so.2 /usr/local/lib/
+COPY --from=builder /usr/lib/libtensorflow_framework.so.2 /usr/local/lib/
 
 # Set the environment variables to help the runtime find the TensorFlow C library
 ENV LD_LIBRARY_PATH /usr/local/lib
-RUN ldconfig
 
 LABEL authors="M1chl"
 
