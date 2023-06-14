@@ -67,12 +67,10 @@ COPY --from=builder /app/assets/nsfw /assets/nsfw
 COPY --from=builder /app/assets/temp /assets/temp
 COPY --from=builder /app/labels.txt /assets/nsfw/labels.txt
 
-COPY --from=builder /usr/lib/libtensorflow_framework.so.2.11.0 /usr/local/lib/
-COPY --from=builder /usr/lib/libtensorflow.so.2.11.0 /usr/local/lib/
-COPY --from=builder /usr/lib/libtensorflow.so.2 /usr/local/lib/
-COPY --from=builder /usr/lib/libtensorflow.so.2 /usr/local/lib/libtensorflow.so.4
-COPY --from=builder /usr/lib/libtensorflow_framework.so.2 /usr/local/lib/
-COPY --from=builder /usr/lib/libtensorflow_framework.so.2 /usr/local/lib/libtensorflow_framework.so.4
+RUN wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz && \
+    tar -C /usr -xzf libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz && \
+    ldconfig && \
+    rm libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz
 
 # Set the environment variables to help the runtime find the TensorFlow C library
 ENV LD_LIBRARY_PATH /usr/local/lib
