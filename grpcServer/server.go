@@ -10,6 +10,8 @@ import (
 	"nsfw_sherlock/utils"
 )
 
+const maxMessageSize = 100 * 1024 * 1024
+
 func StartGrpcServer() {
 	// Dry run for TF
 	test, err := common.TestPictureNSFW("./pic.jpg")
@@ -36,7 +38,12 @@ func StartGrpcServer() {
 
 	s := Server{}
 	//, grpc.UnaryInterceptor(serverInterceptor)
-	grpcServer := grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
+	opts := []grpc.ServerOption{
+		grpc.Creds(insecure.NewCredentials()),
+		grpc.MaxRecvMsgSize(maxMessageSize),
+		grpc.MaxSendMsgSize(maxMessageSize),
+	}
+	grpcServer := grpc.NewServer(opts...)
 	grpcModels.RegisterNSFWServer(grpcServer, &s)
 	if err := grpcServer.Serve(lis); err != nil {
 		utils.WrapErrorLog(err.Error())
