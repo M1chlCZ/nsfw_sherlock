@@ -160,6 +160,7 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 		decode = op.DecodePng(s, input, op.DecodePngChannels(3))
 	} else if imageFormat == "gif" {
 		decode = op.DecodeGif(s, input)
+		decode = op.Squeeze(s, decode, op.SqueezeAxis([]int64{0}))
 	} else if imageFormat == "bmp" {
 		decode = op.DecodeBmp(s, input, op.DecodeBmpChannels(3))
 	} else if imageFormat == "jpeg" || imageFormat == "jpg" {
