@@ -52,6 +52,7 @@ func (t *Detector) Labels(img []byte, filetype string) (result Labels, err error
 		return result, err
 	}
 
+	fmt.Println(fmt.Sprintf("nsfw: processing type %s", filetype))
 	// Make tensor
 	tensor, err := createTensorFromImage(img, filetype)
 
@@ -157,7 +158,11 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 	// Decode PNG or JPEG
 	var decode tf.Output
 	if imageFormat == "png" {
-		decode = op.DecodePng(s, input, op.DecodePngChannels(3))
+		//decode = op.DecodePng(s, input, op.DecodePngChannels(3))
+		decode = op.DecodePng(s, input, op.DecodePngChannels(4))
+		decode = op.Slice(s, decode,
+			op.Const(s.SubScope("begin"), []int32{0, 0, 0}),
+			op.Const(s.SubScope("size"), []int32{-1, -1, 3}))
 	} else if imageFormat == "gif" {
 		decode = op.DecodeGif(s, input)
 		decode = op.Squeeze(s, decode, op.SqueezeAxis([]int64{0}))
