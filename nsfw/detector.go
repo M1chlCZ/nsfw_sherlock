@@ -164,21 +164,11 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 			op.Const(s.SubScope("begin"), []int32{0, 0, 0}),
 			op.Const(s.SubScope("size"), []int32{-1, -1, 3}))
 	} else if imageFormat == "gif" {
-		decode = op.DecodeGif(s, input)
-		shape := decode.Shape().NumDimensions()
-		// If the shape is unknown, set it statically.
-		if shape == -1 {
-			decode = op.Squeeze(s,
-				op.ExpandDims(s,
-					decode,
-					op.Const(s.SubScope("make_batch"), int32(0))),
-				op.SqueezeAxis([]int64{0}))
-			shape = decode.Shape().NumDimensions()
-		} else if shape == 4 {
-			decode = op.Squeeze(s, decode, op.SqueezeAxis([]int64{0}))
-		} else if shape > 4 {
-			return nil, tf.Output{}, tf.Output{}, fmt.Errorf("image format not supported: %s", imageFormat)
-		}
+		decode = op.DecodeGif(s, input) // shape: [num_frames, H, W, C]
+		decode = op.Slice(s, decode,
+			op.Const(s.SubScope("gif_frame_start"), []int32{0, 0, 0, 0}),
+			op.Const(s.SubScope("gif_frame_size"), []int32{1, -1, -1, -1})) // shape: [1, H, W, C]
+		decode = op.Squeeze(s, decode, op.SqueezeAxis([]int64{0})) // shape: [H, W, C]
 	} else if imageFormat == "bmp" {
 		decode = op.DecodeBmp(s, input, op.DecodeBmpChannels(3))
 	} else if imageFormat == "jpeg" || imageFormat == "jpg" {
