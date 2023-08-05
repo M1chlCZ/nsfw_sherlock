@@ -148,7 +148,7 @@ func (t *Detector) getLabels(p []float32) Labels {
 
 func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.Output, err error) {
 	const (
-		H, W  = 448, 448
+		H, W  = 224, 224
 		Mean  = float32(117)
 		Scale = float32(1)
 	)
@@ -160,6 +160,7 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 		decode = op.DecodePng(s, input, op.DecodePngChannels(3))
 	} else if imageFormat == "gif" {
 		decode = op.DecodeGif(s, input)
+		decode = op.Squeeze(s, decode, op.SqueezeAxis([]int64{0}))
 	} else if imageFormat == "bmp" {
 		decode = op.DecodeBmp(s, input, op.DecodeBmpChannels(3))
 	} else if imageFormat == "jpeg" || imageFormat == "jpg" {
