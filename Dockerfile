@@ -1,5 +1,5 @@
 # Use the official Golang image as the base image
-FROM golang:1.20.3 as builder
+FROM golang:latest as builder
 
 # Install required dependencies
 RUN apt-get update && apt-get install -y \
@@ -39,9 +39,9 @@ RUN mkdir -p grpcModels
 RUN mkdir -p assets/temp
 RUN mkdir -p assets/nsfw
 
-RUN wget -q https://github.com/GantMan/nsfw_model/releases/download/1.1.0/nsfw_mobilenet_v2_140_224.zip
+RUN wget -q https://github.com/GantMan/nsfw_model/releases/download/1.2.0/mobilenet_v2_140_224.1.zip
 
-RUN unzip nsfw_mobilenet_v2_140_224.zip && mv mobilenet_v2_140_224/* /app/assets/nsfw/ && rm -r mobilenet_v2_140_224 nsfw_mobilenet_v2_140_224.zip
+RUN unzip mobilenet_v2_140_224.1.zip && mv mobilenet_v2_140_224/* /app/assets/nsfw/ && rm -r mobilenet_v2_140_224 mobilenet_v2_140_224.1.zip
 
 # Compile the .proto files
 RUN cd ./proto && \
@@ -55,10 +55,16 @@ RUN go mod tidy && \
 FROM ubuntu:latest
 
 # Install required dependencies
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    rm -rf /var/lib/apt/lists/*
+RUN add-apt-repository ppa:alex-p/tesseract-ocr5
 RUN apt-get update -qq
-RUN apt-get install -y -qq libtesseract-dev libleptonica-dev
+RUN apt-get install -y -qq curl libtesseract-dev libleptonica-dev
+RUN apt install -y tesseract-ocr
 ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
-RUN apt-get install -y -qq tesseract-ocr-eng
+RUN apt-get install -y -qq tesseract-ocr-eng tesseract-ocr
+RUN ldconfig
 
 COPY --from=builder /app/main .
 COPY --from=builder /app/pic.jpg .

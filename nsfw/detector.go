@@ -138,11 +138,11 @@ func (t *Detector) loadModel() error {
 
 func (t *Detector) getLabels(p []float32) Labels {
 	return Labels{
-		Drawing: p[0],
-		Hentai:  p[1],
-		Neutral: p[2],
-		Porn:    p[3],
-		Sexy:    p[4],
+		Drawings: p[0],
+		Hentai:   p[1],
+		Neutral:  p[2],
+		Porn:     p[3],
+		Sexy:     p[4],
 	}
 }
 
@@ -160,7 +160,6 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 		decode = op.DecodePng(s, input, op.DecodePngChannels(3))
 	} else if imageFormat == "gif" {
 		decode = op.DecodeGif(s, input)
-		decode = op.Squeeze(s, decode, op.SqueezeAxis([]int64{0}))
 	} else if imageFormat == "bmp" {
 		decode = op.DecodeBmp(s, input, op.DecodeBmpChannels(3))
 	} else if imageFormat == "jpeg" || imageFormat == "jpg" {
