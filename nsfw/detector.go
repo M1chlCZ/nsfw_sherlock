@@ -185,8 +185,12 @@ func transformImageGraph(imageFormat string) (graph *tf.Graph, input, output tf.
 }
 
 func createTensorFromImage(image []byte, imageFormat string) (*tf.Tensor, error) {
+	var err error
 	if imageFormat == "webp" {
-		image = webpToPng(image)
+		image, err = webpToPng(image)
+		if err != nil {
+			return nil, err
+		}
 		imageFormat = "png"
 	}
 	tensor, err := tf.NewTensor(string(image))
@@ -212,15 +216,15 @@ func createTensorFromImage(image []byte, imageFormat string) (*tf.Tensor, error)
 	return normalized[0], nil
 }
 
-func webpToPng(image []byte) []byte {
+func webpToPng(image []byte) ([]byte, error) {
 	img, err := webp.Decode(bytes.NewReader(image))
 	if err != nil {
-		return image
+		return image, err
 	}
 	buf := new(bytes.Buffer)
 	err = png.Encode(buf, img)
 	if err != nil {
-		return image
+		return image, err
 	}
-	return buf.Bytes()
+	return buf.Bytes(), nil
 }
