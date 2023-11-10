@@ -4,6 +4,7 @@ option go_package = "./grpcModels";
 
 service NSFW {
     rpc Detect (NSFWRequest) returns (NSFWResponse) {}
+    rpc DetectLabels (NSFWLabelsRequest) returns (NSFWLabels) {}
 }
 
 message NSFWRequest {
@@ -14,4 +15,18 @@ message NSFWRequest {
 message NSFWResponse {
     bool nsfwPicture = 1;
     bool nsfwText = 2;
+}
+
+message NSFWLabelsRequest {
+    string base64 = 1;
+    string filename = 2;
+}
+
+message NSFWLabels {
+    float Drawings = 1;
+    float Hentai = 2;
+    float Neutral = 3;
+    float Porn = 4;
+    float Sexy = 5;
+    bool nsfwText = 6;
 }

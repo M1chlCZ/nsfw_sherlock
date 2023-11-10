@@ -41,6 +41,7 @@ func StartWebServer() {
 	app.Use(cors.New())
 
 	app.Post("/pic/check", picCheck)
+	app.Post("/pic/labels", picLabels)
 	app.Get("/ping", ping)
 
 	go func() {
@@ -116,5 +117,62 @@ func picCheck(c *fiber.Ctx) error {
 		"message":  "success",
 		"nsfwText": isSafeText,
 		"nsfwPic":  isSafe,
+	})
+}
+
+func picLabels(c *fiber.Ctx) error {
+	type Req struct {
+		Base64   string `json:"base64"`
+		Filename string `json:"filename"`
+	}
+	var req Req
+	err := c.BodyParser(&req)
+	if err != nil {
+		return utils.ReportError(c, err.Error()+"Bad Request", fiber.StatusBadRequest)
+	}
+	if req.Base64 == "" {
+		return utils.ReportError(c, "Bad Request", fiber.StatusBadRequest)
+	}
+	decoded, err := utils.DecodePayload([]byte(req.Base64))
+	if err != nil {
+		return utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+	}
+	suffix := strings.Split(req.Filename, ".")[1]
+	if _, err := os.Stat("/assets/temp"); os.IsNotExist(err) {
+		err := os.Mkdir("/assets/temp", os.ModePerm)
+		if err != nil {
+			return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
+		}
+	}
+	filename := fmt.Sprintf("./assets/temp/%s.%s", utils.GenerateSecureToken(8), suffix)
+	err = os.WriteFile(filename, decoded, 0644)
+	if err != nil {
+		return utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+	}
+	defer func() {
+		err := os.Remove(filename)
+		if err != nil {
+			log.Println(err.Error())
+		}
+	}()
+	labels, err := common.TestPictureNSFWLabels(filename)
+	if err != nil {
+		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
+	}
+
+	isSafeText, err := common.DetectTextNSFW(filename)
+	if err != nil {
+		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
+	}
+
+	return c.JSON(fiber.Map{
+		"status":   "ok",
+		"message":  "success",
+		"drawings": labels.GetLabels().Drawings,
+		"hentai":   labels.GetLabels().Hentai,
+		"neutral":  labels.GetLabels().Neutral,
+		"porn":     labels.GetLabels().Porn,
+		"sexy":     labels.GetLabels().Sexy,
+		"nsfwText": isSafeText,
 	})
 }
