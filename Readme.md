@@ -39,6 +39,8 @@ __Usage with Git Clone:__
     LOADING YOUR OWN BAD WORDS:
     docker run -e APP_ENV=grpc/http  -v /path/to/your/host/bad_words.txt:/bad_words.txt -p 4000:4000 nsfwsherlock
 
+    If you need tighten up or loosen up NSFW detection rules, you can do so in nsfw/nsfw.go file
+
 #
 
 __Usage with Docker Hub:__
