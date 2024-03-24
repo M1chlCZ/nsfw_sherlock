@@ -16,6 +16,12 @@ __Both HTTP and GRPC APIs are supported__
 
 Use docker to run NSFW Sherlock
 
+###
+__UPDATE 0.0.0.4:__
+
+Now you can use additional API, which will give you labels (Drawings, Neutral, Hentai, Porn, Sexy) and its values directly. Implemented on both Web and GRPC APIs.
+For Web: /pic/labels
+For GRPC: Please refer to protofile in ./proto
 
 ### 
 
@@ -33,11 +39,31 @@ __Usage with Git Clone:__
     HTTP:
     docker run -e APP_ENV=http -p 4000:4000 nsfwsherlock
     (POST /pic/check) req: {"base64": "base64 string of image", filename: "image.jpg"}
+    res: {
+        "status":   "ok", 
+        "message":  "success", 
+        "nsfwText": true/false, 
+        "nsfwPic":  true/false
+    }
+    
+    (POST /pic/labels) req: {"base64": "base64 string of image", filename: "image.jpg"}, 
+    res: {
+        "status":   "ok",
+		"message":  "success",
+		"drawings": 0.0,
+		"hentai":   0.0,
+		"neutral":  0.0,
+		"porn":     0.0,
+		"sexy":     0.0,
+		"nsfwText": true/false,
+      },
 
     ---------------------------------------------
 
     LOADING YOUR OWN BAD WORDS:
     docker run -e APP_ENV=grpc/http  -v /path/to/your/host/bad_words.txt:/bad_words.txt -p 4000:4000 nsfwsherlock
+
+    If you need tighten up or loosen up NSFW detection rules, you can do so in nsfw/nsfw.go file or use /pic/labels endpoint
 
 #
 
@@ -53,6 +79,24 @@ __Usage with Docker Hub:__
     HTTP:
     docker run -e APP_ENV=http -p 4000:4000 m1chl/nsfw-sherlock
     (POST /pic/check) req: {"base64": "base64 string of image", filename: "image.jpg"}
+    res: {
+        "status":   "ok", 
+        "message":  "success", 
+        "nsfwText": true/false, 
+        "nsfwPic":  true/false
+    }
+    
+    (POST /pic/labels) req: {"base64": "base64 string of image", filename: "image.jpg"}, 
+    res: {
+        "status":   "ok",
+		"message":  "success",
+		"drawings": 0.0,
+		"hentai":   0.0,
+		"neutral":  0.0,
+		"porn":     0.0,
+		"sexy":     0.0,
+		"nsfwText": true/false,
+      },
     
 
     ---------------------------------------------

@@ -19,9 +19,14 @@ func (l *Labels) IsNSFW() bool {
 	return l.NSFW(ThresholdSafe)
 }
 
+// GetLabels returns the label values produced by TensorFlow.
+func (l *Labels) GetLabels() Labels {
+	return *l
+}
+
 // NSFW returns true if the image is may not be safe for work.
 func (l *Labels) NSFW(threshold float32) bool {
-	if l.Neutral > 0.3 || l.Drawings > 0.4 {
+	if l.Neutral > 0.75 || l.Drawings > 0.75 {
 		if l.Porn < 0.1 && l.Sexy < 0.1 {
 			return false
 		} else {

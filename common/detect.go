@@ -21,6 +21,14 @@ func TestPictureNSFW(filename string) (bool, error) {
 	return l.IsNSFW(), nil
 }
 
+func TestPictureNSFWLabels(filename string) (nsfw.Labels, error) {
+	l, err := detect(filename)
+	if err != nil {
+		return nsfw.Labels{}, err
+	}
+	return l.GetLabels(), nil
+}
+
 func detect(filename string) (nsfw.Labels, error) {
 	result, err := detector.File(filename)
 	if err != nil {
