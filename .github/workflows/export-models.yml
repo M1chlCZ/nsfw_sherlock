@@ -45,6 +45,8 @@ jobs:
                   print(f"::error::{name}: exported {digest}, manifest {want}")
               else:
                   print(f"{name}: {digest} matches manifest")
+          if failed:
+              print("::error::torch.onnx.export is not byte-reproducible across platforms. The canonical bytes are the models-v1 release assets. To re-export, update models/manifest.json with the new sha256 values and re-run the parity suite before publishing.")
           sys.exit(1 if failed else 0)
           PY
 
