@@ -5,6 +5,7 @@ option go_package = "./grpcModels";
 service NSFW {
     rpc Detect (NSFWRequest) returns (NSFWResponse) {}
     rpc DetectLabels (NSFWLabelsRequest) returns (NSFWLabels) {}
+    rpc Analyze (NSFWRequest) returns (Analysis) {}
 }
 
 message NSFWRequest {
@@ -29,4 +30,40 @@ message NSFWLabels {
     float Porn = 4;
     float Sexy = 5;
     bool nsfwText = 6;
+}
+
+message Analysis {
+    string verdict = 1;
+    float nsfw = 2;
+    bool nsfwText = 3;
+    NSFWLabels labels = 4;
+    ScoreMap photo = 5;
+    ScoreMap anime = 6;
+    repeated Detection detections = 7;
+    repeated ModelInfo models = 8;
+    int64 elapsedMs = 9;
+}
+
+message ScoreMap {
+    string model = 1;
+    map<string, float> scores = 2;
+}
+
+message Detection {
+    string label = 1;
+    float score = 2;
+    Box box = 3;
+}
+
+message Box {
+    float x = 1;
+    float y = 2;
+    float w = 3;
+    float h = 4;
+}
+
+message ModelInfo {
+    string id = 1;
+    string kind = 2;
+    string sha256 = 3;
 }

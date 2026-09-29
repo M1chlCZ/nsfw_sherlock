@@ -7,7 +7,6 @@
 
 # Test binary, built with `go test -c`
 *.test
-*.sh
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
@@ -15,7 +14,6 @@
 .idea/
 # Dependency directories (remove the comment below to include it)
 # vendor/
-*.pb.go
 .config
 cli/upload_rual
 .data
@@ -23,3 +21,8 @@ cli/upload_rual
 /scripts/storage/
 /ts/
 assets/
+assets/models/
+lib/
+.bin/
+*.onnx
+*.tgz

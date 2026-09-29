@@ -1,0 +1,21 @@
+# Exact dependency pins for scripts/export-models.py.
+#
+# The script header states the same versions; this file is the reproducible
+# install source for a fresh environment:
+#
+#     python3 -m venv .venv-export
+#     .venv-export/bin/pip install -r scripts/requirements-export.txt
+#     .venv-export/bin/python scripts/export-models.py --out assets/models
+#
+# torchvision is not imported directly, but timm and transformers'
+# TimmWrapperForImageClassification (used for Freepik/nsfw_image_detector)
+# both require it.
+torch==2.14.0
+torchvision==0.29.0
+transformers==5.17.0
+timm==1.0.30
+onnx==1.23.0
+onnxruntime==1.30.0
+pillow==12.3.0
+numpy==2.4.6
+huggingface_hub==1.33.0

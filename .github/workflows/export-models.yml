@@ -1,0 +1,69 @@
+name: Export models
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to create or update
+        required: false
+        default: models-v1
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    name: Export and publish ONNX models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements-export.txt
+
+      - name: Install export dependencies
+        run: pip install -r scripts/requirements-export.txt
+
+      - name: Export models
+        run: python scripts/export-models.py --out dist
+
+      - name: Verify exported hashes against manifest
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, sys
+          manifest = json.load(open("models/manifest.json"))
+          expected = {m["file"]: m["sha256"] for m in manifest["models"]}
+          failed = False
+          for name in ("freepik-eva02-448.onnx", "nsfw-vit5-224.onnx"):
+              digest = hashlib.sha256(open(f"dist/{name}", "rb").read()).hexdigest()
+              want = expected.get(name)
+              if want != digest:
+                  failed = True
+                  print(f"::error::{name}: exported {digest}, manifest {want}")
+              else:
+                  print(f"{name}: {digest} matches manifest")
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: ${{ inputs.release_tag }}
+          body: |
+            ONNX classifier exports for nsfw_sherlock (opset 17, dynamic batch).
+            Both files are exported and verified by scripts/export-models.py.
+
+            The model URLs in models/manifest.json already point at the
+            models-v1 tag, so re-running this workflow with the same tag
+            updates the assets in place.
+          files: |
+            dist/freepik-eva02-448.onnx
+            dist/nsfw-vit5-224.onnx
+            dist/freepik-eva02-448.onnx.sha256
+            dist/nsfw-vit5-224.onnx.sha256
+          fail_on_unmatched_files: true
+          overwrite_files: true

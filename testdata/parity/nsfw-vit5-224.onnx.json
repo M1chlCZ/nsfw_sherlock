@@ -1,0 +1,113 @@
+{
+  "activation": "softmax",
+  "input_names": [
+    "pixel_values"
+  ],
+  "kind": "classifier",
+  "labels": [
+    "drawings",
+    "hentai",
+    "neutral",
+    "porn",
+    "sexy"
+  ],
+  "model": "nsfw-vit5-224.onnx",
+  "output_names": [
+    "logits"
+  ],
+  "outputs": {
+    "logits": {
+      "scores": {
+        "drawings": 0.300467,
+        "hentai": 0.01227,
+        "neutral": 0.63893,
+        "porn": 0.020947,
+        "sexy": 0.027386
+      },
+      "shape": [
+        1,
+        5
+      ],
+      "stats": {
+        "max": 2.2605838775634766,
+        "min": -1.692069172859192,
+        "sum": 0.028249263763427734
+      },
+      "values": [
+        1.506126,
+        -1.692069,
+        2.260584,
+        -1.157196,
+        -0.889196
+      ]
+    }
+  },
+  "preprocess": {
+    "crop_pct": 0.0,
+    "height": 224,
+    "image": {
+      "generator": "gradient-checkerboard-v1",
+      "height": 384,
+      "width": 512
+    },
+    "interpolation": "bilinear",
+    "mean": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "normalize": true,
+    "std": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "tensor_sha256": "022163e568d08fac0d6b591d3d5e96b4e122e0ba4b6716231306a38705de93dd",
+    "tensor_sha256_note": "informational: the Go engine may round differently; compare tensor_stats",
+    "tensor_shape": [
+      1,
+      3,
+      224,
+      224
+    ],
+    "tensor_stats": {
+      "max": 1.0,
+      "mean": -0.002602700376883149,
+      "min": -1.0
+    },
+    "width": 224
+  },
+  "reference": {
+    "config": {
+      "do_normalize": true,
+      "do_rescale": true,
+      "do_resize": true,
+      "image_mean": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "image_std": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "resample": 2,
+      "rescale_factor": 0.00392156862745098,
+      "size": {
+        "height": 224,
+        "width": 224
+      }
+    },
+    "kind": "hf_processor",
+    "processor": "ViTImageProcessor",
+    "repo": "giacomoarienti/nsfw-classifier",
+    "revision": "29f43cab33874e62db8a1973bd0f84b0c69ff057"
+  },
+  "role": "compat",
+  "schema_version": 2,
+  "sha256": "a8e5c07c1e065a31ce452b030b3855daf4992b21b7027d000e657d30d1c2882f",
+  "tolerance": {
+    "score": 0.05
+  }
+}

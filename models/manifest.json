@@ -1,0 +1,357 @@
+{
+  "version": 1,
+  "profiles": {
+    "balanced": {
+      "models": [
+        "photo-freepik",
+        "anime-caformer",
+        "regions-nudenet-320"
+      ]
+    },
+    "max": {
+      "models": [
+        "photo-freepik",
+        "anime-caformer",
+        "regions-nudenet-640"
+      ]
+    },
+    "fast": {
+      "models": [
+        "photo-freepik",
+        "anime-mobilenet",
+        "regions-nudenet-320"
+      ]
+    },
+    "compat": {
+      "models": [
+        "photo-compat-vit5"
+      ]
+    }
+  },
+  "models": [
+    {
+      "id": "photo-freepik",
+      "kind": "classifier",
+      "role": "photo",
+      "file": "freepik-eva02-448.onnx",
+      "sha256": "43f3aafc4b798b45c30da9d2526226ba9473d7c1f6e0285c08921aea1204a8b9",
+      "input_names": [
+        "pixel_values"
+      ],
+      "output_names": [
+        "logits"
+      ],
+      "source": {
+        "type": "release",
+        "url": "https://github.com/M1chlCZ/nsfw_sherlock/releases/download/models-v1/freepik-eva02-448.onnx"
+      },
+      "input": {
+        "width": 448,
+        "height": 448,
+        "mean": [
+          0.48145466,
+          0.4578275,
+          0.40821073
+        ],
+        "std": [
+          0.26862954,
+          0.26130258,
+          0.27577711
+        ],
+        "normalize": true,
+        "resize": "stretch"
+      },
+      "labels": [
+        "neutral",
+        "low",
+        "medium",
+        "high"
+      ],
+      "output": {
+        "activation": "softmax"
+      },
+      "required": true,
+      "license": "MIT",
+      "source_repo": "https://huggingface.co/Freepik/nsfw_image_detector"
+    },
+    {
+      "id": "photo-compat-vit5",
+      "kind": "classifier",
+      "role": "compat",
+      "file": "nsfw-vit5-224.onnx",
+      "sha256": "a8e5c07c1e065a31ce452b030b3855daf4992b21b7027d000e657d30d1c2882f",
+      "input_names": [
+        "pixel_values"
+      ],
+      "output_names": [
+        "logits"
+      ],
+      "source": {
+        "type": "release",
+        "url": "https://github.com/M1chlCZ/nsfw_sherlock/releases/download/models-v1/nsfw-vit5-224.onnx"
+      },
+      "input": {
+        "width": 224,
+        "height": 224,
+        "mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "normalize": true,
+        "resize": "stretch",
+        "interpolation": "bilinear"
+      },
+      "labels": [
+        "drawings",
+        "hentai",
+        "neutral",
+        "porn",
+        "sexy"
+      ],
+      "output": {
+        "activation": "softmax"
+      },
+      "required": false,
+      "license": "CC-BY-NC-ND-4.0",
+      "source_repo": "https://huggingface.co/giacomoarienti/nsfw-classifier"
+    },
+    {
+      "id": "anime-caformer",
+      "kind": "classifier",
+      "role": "anime",
+      "file": "caformer_s36_plus.onnx",
+      "sha256": "fd5fdea9a8b610aa26a513df7e2e588a3fa0f641ba3408e5c67501663f501287",
+      "input_names": [
+        "input"
+      ],
+      "output_names": [
+        "output"
+      ],
+      "source": {
+        "type": "hf",
+        "url": "https://huggingface.co/deepghs/anime_rating/resolve/46be80bfe01a415efa5aa7c025528cac82a8b88a/caformer_s36_plus/model.onnx"
+      },
+      "input": {
+        "width": 384,
+        "height": 384,
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "normalize": true,
+        "crop_pct": 1.0
+      },
+      "labels": [
+        "safe",
+        "r15",
+        "r18"
+      ],
+      "output": {
+        "activation": "none"
+      },
+      "required": true,
+      "license": "MIT",
+      "source_repo": "https://huggingface.co/deepghs/anime_rating"
+    },
+    {
+      "id": "anime-mobilenet",
+      "kind": "classifier",
+      "role": "anime",
+      "file": "mobilenetv3_sce_dist.onnx",
+      "sha256": "31814ba076d65d129b89322a767d55d0669c54015134c117da3cf2717defde4e",
+      "input_names": [
+        "input"
+      ],
+      "output_names": [
+        "output"
+      ],
+      "source": {
+        "type": "hf",
+        "url": "https://huggingface.co/deepghs/anime_rating/resolve/46be80bfe01a415efa5aa7c025528cac82a8b88a/mobilenetv3_sce_dist/model.onnx"
+      },
+      "input": {
+        "width": 224,
+        "height": 224,
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "normalize": true,
+        "crop_pct": 0.875
+      },
+      "labels": [
+        "safe",
+        "r15",
+        "r18"
+      ],
+      "output": {
+        "activation": "none"
+      },
+      "required": false,
+      "license": "MIT",
+      "source_repo": "https://huggingface.co/deepghs/anime_rating"
+    },
+    {
+      "id": "regions-nudenet-320",
+      "kind": "detector",
+      "role": "regions",
+      "file": "320n.onnx",
+      "sha256": "c15d8273adad2d0a92f014cc69ab2d6c311a06777a55545f2c4eb46f51911f0f",
+      "input_names": [
+        "images"
+      ],
+      "output_names": [
+        "output0"
+      ],
+      "source": {
+        "type": "hf",
+        "url": "https://huggingface.co/deepghs/nudenet_onnx/resolve/44956a0587943016350c7815f9e0dec089d45cae/320n.onnx"
+      },
+      "input": {
+        "width": 320,
+        "height": 320,
+        "mean": [
+          0,
+          0,
+          0
+        ],
+        "std": [
+          0,
+          0,
+          0
+        ],
+        "normalize": false
+      },
+      "detector": {
+        "classes": [
+          "FEMALE_GENITALIA_COVERED",
+          "FACE_FEMALE",
+          "BUTTOCKS_EXPOSED",
+          "FEMALE_BREAST_EXPOSED",
+          "FEMALE_GENITALIA_EXPOSED",
+          "MALE_BREAST_EXPOSED",
+          "ANUS_EXPOSED",
+          "FEET_EXPOSED",
+          "BELLY_COVERED",
+          "FEET_COVERED",
+          "ARMPITS_COVERED",
+          "ARMPITS_EXPOSED",
+          "FACE_MALE",
+          "BELLY_EXPOSED",
+          "MALE_GENITALIA_EXPOSED",
+          "ANUS_COVERED",
+          "FEMALE_BREAST_COVERED",
+          "BUTTOCKS_COVERED"
+        ],
+        "score_threshold": 0.25,
+        "iou_threshold": 0.45,
+        "explicit_classes": [
+          "FEMALE_GENITALIA_EXPOSED",
+          "MALE_GENITALIA_EXPOSED",
+          "ANUS_EXPOSED",
+          "FEMALE_BREAST_EXPOSED",
+          "BUTTOCKS_EXPOSED"
+        ],
+        "suggestive_classes": [
+          "FEMALE_BREAST_COVERED",
+          "BUTTOCKS_COVERED",
+          "BELLY_EXPOSED",
+          "ARMPITS_EXPOSED"
+        ]
+      },
+      "required": false,
+      "license": "AGPL-3.0",
+      "source_repo": "https://github.com/notAI-tech/NudeNet (mirror https://huggingface.co/deepghs/nudenet_onnx)"
+    },
+    {
+      "id": "regions-nudenet-640",
+      "kind": "detector",
+      "role": "regions",
+      "file": "640m.onnx",
+      "sha256": "04fe3d77980780c1f8297dc6d7f942fd5b3abe6942a188f742a85241e4f634eb",
+      "input_names": [
+        "images"
+      ],
+      "output_names": [
+        "output0"
+      ],
+      "source": {
+        "type": "hf",
+        "url": "https://huggingface.co/Kalashnikov/NudeNet/resolve/9f7923d6c0c434c445d5d9df62a8dcecd44b7292/640m.onnx"
+      },
+      "input": {
+        "width": 640,
+        "height": 640,
+        "mean": [
+          0,
+          0,
+          0
+        ],
+        "std": [
+          0,
+          0,
+          0
+        ],
+        "normalize": false
+      },
+      "detector": {
+        "classes": [
+          "FEMALE_GENITALIA_COVERED",
+          "FACE_FEMALE",
+          "BUTTOCKS_EXPOSED",
+          "FEMALE_BREAST_EXPOSED",
+          "FEMALE_GENITALIA_EXPOSED",
+          "MALE_BREAST_EXPOSED",
+          "ANUS_EXPOSED",
+          "FEET_EXPOSED",
+          "BELLY_COVERED",
+          "FEET_COVERED",
+          "ARMPITS_COVERED",
+          "ARMPITS_EXPOSED",
+          "FACE_MALE",
+          "BELLY_EXPOSED",
+          "MALE_GENITALIA_EXPOSED",
+          "ANUS_COVERED",
+          "FEMALE_BREAST_COVERED",
+          "BUTTOCKS_COVERED"
+        ],
+        "score_threshold": 0.25,
+        "iou_threshold": 0.45,
+        "explicit_classes": [
+          "FEMALE_GENITALIA_EXPOSED",
+          "MALE_GENITALIA_EXPOSED",
+          "ANUS_EXPOSED",
+          "FEMALE_BREAST_EXPOSED",
+          "BUTTOCKS_EXPOSED"
+        ],
+        "suggestive_classes": [
+          "FEMALE_BREAST_COVERED",
+          "BUTTOCKS_COVERED",
+          "BELLY_EXPOSED",
+          "ARMPITS_EXPOSED"
+        ]
+      },
+      "required": false,
+      "license": "AGPL-3.0",
+      "source_repo": "https://github.com/notAI-tech/NudeNet (mirror https://huggingface.co/Kalashnikov/NudeNet)"
+    }
+  ]
+}

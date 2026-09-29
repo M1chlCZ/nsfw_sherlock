@@ -1,0 +1,13 @@
+# Exact dependency pins for scripts/inspect-models.py.
+#
+# This is scripts/requirements-export.txt plus OpenCV, which the inspect
+# script uses to reproduce the NudeNet reference preprocessing verbatim
+# (cv2.copyMakeBorder + cv2.dnn.blobFromImage, i.e. non-antialiased
+# INTER_LINEAR on the black-padded square):
+#
+#     python3 -m venv .venv-inspect
+#     .venv-inspect/bin/pip install -r scripts/requirements-inspect.txt
+#     .venv-inspect/bin/python scripts/inspect-models.py --dir assets/models
+#
+-r requirements-export.txt
+opencv-python-headless==5.0.0.93

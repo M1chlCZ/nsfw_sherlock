@@ -1,0 +1,111 @@
+{
+  "activation": "softmax",
+  "input_names": [
+    "pixel_values"
+  ],
+  "kind": "classifier",
+  "labels": [
+    "neutral",
+    "low",
+    "medium",
+    "high"
+  ],
+  "model": "freepik-eva02-448.onnx",
+  "output_names": [
+    "logits"
+  ],
+  "outputs": {
+    "logits": {
+      "scores": {
+        "high": 0.000215,
+        "low": 0.000571,
+        "medium": 0.000115,
+        "neutral": 0.999099
+      },
+      "shape": [
+        1,
+        4
+      ],
+      "stats": {
+        "max": 5.615355491638184,
+        "min": -3.4577412605285645,
+        "sum": -2.5229605436325073
+      },
+      "values": [
+        5.615355,
+        -1.851431,
+        -3.457741,
+        -2.829143
+      ]
+    }
+  },
+  "preprocess": {
+    "crop_pct": 0.0,
+    "height": 448,
+    "image": {
+      "generator": "gradient-checkerboard-v1",
+      "height": 384,
+      "width": 512
+    },
+    "interpolation": "bicubic",
+    "mean": [
+      0.48145466,
+      0.4578275,
+      0.40821073
+    ],
+    "normalize": true,
+    "std": [
+      0.26862954,
+      0.26130258,
+      0.27577711
+    ],
+    "tensor_sha256": "1ff6b1e5dfedecab61eb248db59cd1b81a47bb022bada773e459eb0374a6805a",
+    "tensor_sha256_note": "informational: the Go engine may round differently; compare tensor_stats",
+    "tensor_shape": [
+      1,
+      3,
+      448,
+      448
+    ],
+    "tensor_stats": {
+      "max": 2.1458969116210938,
+      "mean": 0.182843878865242,
+      "min": -1.7922625541687012
+    },
+    "width": 448
+  },
+  "reference": {
+    "config": {
+      "data_config": {
+        "crop_mode": "squash",
+        "crop_pct": 1.0,
+        "input_size": [
+          3,
+          448,
+          448
+        ],
+        "interpolation": "bicubic",
+        "mean": [
+          0.48145466,
+          0.4578275,
+          0.40821073
+        ],
+        "std": [
+          0.26862954,
+          0.26130258,
+          0.27577711
+        ]
+      }
+    },
+    "kind": "hf_processor",
+    "processor": "TimmWrapperImageProcessor",
+    "repo": "Freepik/nsfw_image_detector",
+    "revision": "15b85477e4fd2000db76ae9aae0f89a72f95e2e3"
+  },
+  "role": "photo",
+  "schema_version": 2,
+  "sha256": "43f3aafc4b798b45c30da9d2526226ba9473d7c1f6e0285c08921aea1204a8b9",
+  "tolerance": {
+    "score": 0.05
+  }
+}

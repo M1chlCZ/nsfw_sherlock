@@ -1,84 +1,76 @@
-# Use the official Golang image as the base image
-FROM golang:latest as builder
+FROM python:3.12-slim AS models
 
-# Install required dependencies
-RUN apt-get update && apt-get install -y \
-     wget \
-     git \
-     gcc \
-    unzip \
-     build-essential
+ARG MODELS_BASE_URL=""
 
-RUN apt-get install -y -qq libtesseract-dev libleptonica-dev
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install protobuf compiler and gRPC plugins
-RUN apt-get install -y protobuf-compiler
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
-RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
-RUN mv /go/bin/protoc-gen-go* /usr/local/bin/
+WORKDIR /src
+COPY scripts/ scripts/
+COPY models/manifest.json /models/manifest.json
 
-# Download and install TensorFlow C library
-RUN wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz && \
-    tar -C /usr -xzf libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz && \
-    ldconfig && \
-    rm libtensorflow-cpu-linux-x86_64-2.11.0.tar.gz
+RUN pip install --no-cache-dir -r scripts/requirements-export.txt
 
-# Set the environment variables to help the Go compiler find the TensorFlow C library
-ENV LD_LIBRARY_PATH /usr/local/lib
-ENV CGO_CFLAGS "-I/usr/local/include"
-ENV CGO_LDFLAGS "-L/usr/local/lib"
+RUN if [ -n "$MODELS_BASE_URL" ]; then \
+      curl -fsSL -o /models/freepik-eva02-448.onnx "$MODELS_BASE_URL/freepik-eva02-448.onnx" \
+      && curl -fsSL -o /models/nsfw-vit5-224.onnx "$MODELS_BASE_URL/nsfw-vit5-224.onnx"; \
+    else \
+      python scripts/export-models.py --out /models; \
+    fi \
+    && bash scripts/fetch-models.sh --dir /models --manifest /models/manifest.json
 
-# Create a working directory for your Go project
-WORKDIR /app
+FROM golang:1.27-bookworm AS builder
 
-# Copy the Go project files into the container
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libtesseract-dev libleptonica-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
+RUN CGO_ENABLED=1 go build -tags ocr -ldflags "-s -w" -o /out/nsfw-sherlock .
 
-# Create the required directories
-RUN mkdir -p grpcModels
-RUN mkdir -p assets/temp
-RUN mkdir -p assets/nsfw
+FROM debian:bookworm-slim AS runtime
 
-RUN wget -q https://github.com/GantMan/nsfw_model/releases/download/1.2.0/mobilenet_v2_140_224.1.zip
+ARG TARGETARCH
+ARG ORT_SHA256_AMD64=c3fddc4f139a045b0c4902c57410f0694f1c2fdf9b6939fbe38b1aeae7cd14ba
+ARG ORT_SHA256_ARM64=e1799098ebc054b370f6176a450f158720f297818c613e5dc99b92e2ec82346f
 
-RUN unzip mobilenet_v2_140_224.1.zip && mv mobilenet_v2_140_224/* /app/assets/nsfw/ && rm -r mobilenet_v2_140_224 mobilenet_v2_140_224.1.zip
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl libtesseract5 liblept5 tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
 
-# Compile the .proto files
-RUN cd ./proto && \
-    protoc --go_out=../grpcModels --go_opt=paths=source_relative --go-grpc_out=../grpcModels --go-grpc_opt=paths=source_relative *.proto
+RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "$arch" in \
+      amd64) ort_arch=x64; ort_sha="$ORT_SHA256_AMD64" ;; \
+      arm64) ort_arch=aarch64; ort_sha="$ORT_SHA256_ARM64" ;; \
+      *) echo "unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/ort.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.29.0/onnxruntime-linux-${ort_arch}-1.29.0.tgz" \
+    && printf '%s  %s\n' "$ort_sha" /tmp/ort.tgz | sha256sum -c - \
+    && tar -xzf /tmp/ort.tgz -C /tmp \
+    && mkdir -p /app/lib \
+    && cp -P "/tmp/onnxruntime-linux-${ort_arch}-1.29.0/lib/libonnxruntime.so"* /app/lib/ \
+    && rm -rf /tmp/ort.tgz "/tmp/onnxruntime-linux-${ort_arch}-1.29.0"
 
-# Build the Go project
-RUN go mod tidy && \
-    go build -o main .
+RUN useradd -r -u 10001 appuser
 
-#Use the official TensorFlow image as the base image
-FROM ubuntu:latest
+COPY --from=builder /out/nsfw-sherlock /app/nsfw-sherlock
+COPY --from=models /models /app/models
 
-# Install required dependencies
-RUN apt-get update && \
-    apt-get install -y software-properties-common && \
-    rm -rf /var/lib/apt/lists/*
-RUN add-apt-repository ppa:alex-p/tesseract-ocr5
-RUN apt-get update -qq
-RUN apt-get install -y -qq curl libtesseract-dev libleptonica-dev
-RUN apt install -y tesseract-ocr
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
-RUN apt-get install -y -qq tesseract-ocr-eng tesseract-ocr
-RUN ldconfig
+RUN chown -R appuser:appuser /app
 
-COPY --from=builder /app/main .
-COPY --from=builder /app/pic.jpg .
-COPY --from=builder /app/bad_words_fallback.txt .
-COPY --from=builder /app/assets/nsfw /assets/nsfw
-COPY --from=builder /app/assets/temp /assets/temp
-COPY --from=builder /app/labels.txt /assets/nsfw/labels.txt
+WORKDIR /app
+ENV APP_ENV=web \
+    LOG_FORMAT=json \
+    MODELS_DIR=/app/models \
+    ORT_LIB=/app/lib/libonnxruntime.so \
+    TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
-COPY --from=builder /usr/lib/libtensorflow.so.2 /usr/local/lib/
-COPY --from=builder /usr/lib/libtensorflow_framework.so.2 /usr/local/lib/
-
-# Set the environment variables to help the runtime find the TensorFlow C library
-ENV LD_LIBRARY_PATH /usr/local/lib
-
-LABEL authors="M1chl"
-
-CMD ["./main"]
+USER appuser
+EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD sh -c 'if [ "$APP_ENV" = "grpc" ]; then exit 0; fi; curl -fsS http://localhost:4000/ping || exit 1'
+ENTRYPOINT ["/app/nsfw-sherlock"]
