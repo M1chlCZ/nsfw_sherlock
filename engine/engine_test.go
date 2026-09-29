@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"io"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -111,7 +110,7 @@ func sleepContext(ctx context.Context, delay time.Duration) error {
 }
 
 func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func classifierEntry(id, role string, required bool, runner classifierRunner) modelEntry {
@@ -142,9 +141,21 @@ func TestAnalyzeRunsModelsInParallel(t *testing.T) {
 	releaseAll := func() { releaseOnce.Do(func() { close(release) }) }
 	defer releaseAll()
 
-	photo := &fakeClassifier{scores: map[string]float32{"neutral": 0.9, "high": 0.1}, started: started, release: release}
-	anime := &fakeClassifier{scores: map[string]float32{"safe": 0.8, "r15": 0.1, "r18": 0.1}, started: started, release: release}
-	det := &fakeDetector{dets: []Detection{{Label: "EXPOSED", Score: 0.5, Box: Box{X: 1, Y: 1, W: 2, H: 2}}}, started: started, release: release}
+	photo := &fakeClassifier{
+		scores:  map[string]float32{"neutral": 0.9, "high": 0.1},
+		started: started,
+		release: release,
+	}
+	anime := &fakeClassifier{
+		scores:  map[string]float32{"safe": 0.8, "r15": 0.1, "r18": 0.1},
+		started: started,
+		release: release,
+	}
+	det := &fakeDetector{
+		dets:    []Detection{{Label: "EXPOSED", Score: 0.5, Box: Box{X: 1, Y: 1, W: 2, H: 2}}},
+		started: started,
+		release: release,
+	}
 
 	entries := []modelEntry{
 		classifierEntry("photo", RolePhoto, true, photo),
@@ -163,10 +174,7 @@ func TestAnalyzeRunsModelsInParallel(t *testing.T) {
 			detector: det,
 		},
 	}
-	e, err := newEngineFromEntries(entries, "balanced", Options{})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
+	e := newEngineFromEntries(entries, "balanced", Options{})
 
 	png := quadPNG(t)
 	type outcome struct {
@@ -179,7 +187,7 @@ func TestAnalyzeRunsModelsInParallel(t *testing.T) {
 		done <- outcome{analysis, err}
 	}()
 
-	for i := 0; i < len(entries); i++ {
+	for i := range entries {
 		select {
 		case <-started:
 		case <-time.After(2 * time.Second):
@@ -219,15 +227,12 @@ func TestAnalyzeRequiredModelError(t *testing.T) {
 	cancelled := make(chan error, 1)
 	optional := &fakeClassifier{scores: map[string]float32{"safe": 1}, delay: time.Hour, done: cancelled}
 
-	e, err := newEngineFromEntries([]modelEntry{
+	e := newEngineFromEntries([]modelEntry{
 		classifierEntry("required", RolePhoto, true, required),
 		classifierEntry("optional", RoleAnime, false, optional),
 	}, "balanced", Options{Log: discardLogger()})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
 
-	_, err = e.Analyze(context.Background(), quadPNG(t))
+	_, err := e.Analyze(context.Background(), quadPNG(t))
 	if err == nil {
 		t.Fatal("Analyze() error = nil, want required model error")
 	}
@@ -251,13 +256,10 @@ func TestAnalyzeOptionalModelError(t *testing.T) {
 	photo := &fakeClassifier{scores: map[string]float32{"neutral": 0.9, "high": 0.1}}
 	anime := &fakeClassifier{err: errors.New("anime unavailable")}
 
-	e, err := newEngineFromEntries([]modelEntry{
+	e := newEngineFromEntries([]modelEntry{
 		classifierEntry("photo", RolePhoto, false, photo),
 		classifierEntry("anime", RoleAnime, false, anime),
 	}, "balanced", Options{Log: discardLogger()})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
 
 	got, err := e.Analyze(context.Background(), quadPNG(t))
 	if err != nil {
@@ -280,16 +282,13 @@ func TestAnalyzeOptionalModelError(t *testing.T) {
 
 func TestAnalyzeContextTimeout(t *testing.T) {
 	blocker := &fakeClassifier{scores: map[string]float32{"neutral": 1}, delay: time.Hour}
-	e, err := newEngineFromEntries([]modelEntry{
+	e := newEngineFromEntries([]modelEntry{
 		classifierEntry("slow", RolePhoto, true, blocker),
 	}, "balanced", Options{Log: discardLogger()})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	_, err = e.Analyze(ctx, quadPNG(t))
+	_, err := e.Analyze(ctx, quadPNG(t))
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Analyze() error = %v, want context.DeadlineExceeded", err)
 	}
@@ -301,12 +300,9 @@ func TestAnalyzeContextTimeout(t *testing.T) {
 func TestAnalyzeParentCancellationWithOnlyOptionalModels(t *testing.T) {
 	started := make(chan struct{}, 1)
 	blocker := &fakeClassifier{scores: map[string]float32{"neutral": 1}, delay: time.Hour, started: started}
-	e, err := newEngineFromEntries([]modelEntry{
+	e := newEngineFromEntries([]modelEntry{
 		classifierEntry("optional", RolePhoto, false, blocker),
 	}, "balanced", Options{Log: discardLogger()})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	type outcome struct {
@@ -337,14 +333,11 @@ func TestAnalyzeParentCancellationWithOnlyOptionalModels(t *testing.T) {
 }
 
 func TestAnalyzeCanceledContextSkipsDecode(t *testing.T) {
-	e, err := newEngineFromEntries(nil, "balanced", Options{})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
+	e := newEngineFromEntries(nil, "balanced", Options{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err = e.Analyze(ctx, []byte("not an image"))
+	_, err := e.Analyze(ctx, []byte("not an image"))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Analyze(canceled) error = %v, want context.Canceled", err)
 	}
@@ -355,22 +348,16 @@ func TestAnalyzeCanceledContextSkipsDecode(t *testing.T) {
 
 func TestAnalyzeInvalidImage(t *testing.T) {
 	t.Run("unsupported", func(t *testing.T) {
-		e, err := newEngineFromEntries(nil, "balanced", Options{})
-		if err != nil {
-			t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-		}
-		_, err = e.Analyze(context.Background(), []byte("not an image"))
+		e := newEngineFromEntries(nil, "balanced", Options{})
+		_, err := e.Analyze(context.Background(), []byte("not an image"))
 		if !errors.Is(err, ErrUnsupportedImage) {
 			t.Fatalf("Analyze(garbage) error = %v, want ErrUnsupportedImage", err)
 		}
 	})
 
 	t.Run("too large", func(t *testing.T) {
-		e, err := newEngineFromEntries(nil, "balanced", Options{Limits: Limits{MaxBytes: 8}})
-		if err != nil {
-			t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-		}
-		_, err = e.Analyze(context.Background(), quadPNG(t))
+		e := newEngineFromEntries(nil, "balanced", Options{Limits: Limits{MaxBytes: 8}})
+		_, err := e.Analyze(context.Background(), quadPNG(t))
 		if !errors.Is(err, ErrImageTooLarge) {
 			t.Fatalf("Analyze(oversized) error = %v, want ErrImageTooLarge", err)
 		}
@@ -381,17 +368,14 @@ func TestAnalyzeSameRoleResolutionIsDeterministic(t *testing.T) {
 	first := &fakeClassifier{scores: map[string]float32{"neutral": 0.1, "high": 0.9}, delay: 30 * time.Millisecond}
 	second := &fakeClassifier{scores: map[string]float32{"neutral": 0.9, "high": 0.1}}
 
-	e, err := newEngineFromEntries([]modelEntry{
+	e := newEngineFromEntries([]modelEntry{
 		classifierEntry("first", RolePhoto, false, first),
 		classifierEntry("second", RolePhoto, false, second),
 	}, "balanced", Options{Log: discardLogger()})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
 
 	png := quadPNG(t)
 	var want Analysis
-	for run := 0; run < 3; run++ {
+	for run := range 3 {
 		got, err := e.Analyze(context.Background(), png)
 		if err != nil {
 			t.Fatalf("Analyze() run %d error = %v, want nil", run, err)
@@ -418,13 +402,10 @@ func TestAnalyzeFailedOptionalClassifierDoesNotOverrideFallback(t *testing.T) {
 	t.Run("fallback wins", func(t *testing.T) {
 		primary := &fakeClassifier{err: errors.New("primary down")}
 		fallback := &fakeClassifier{scores: map[string]float32{"neutral": 0.9, "high": 0.9}}
-		e, err := newEngineFromEntries([]modelEntry{
+		e := newEngineFromEntries([]modelEntry{
 			classifierEntry("primary", RolePhoto, false, primary),
 			classifierEntry("fallback", RolePhoto, false, fallback),
 		}, "balanced", Options{Log: discardLogger()})
-		if err != nil {
-			t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-		}
 
 		got, err := e.Analyze(context.Background(), quadPNG(t))
 		if err != nil {
@@ -456,13 +437,12 @@ func TestAnalyzeFailedOptionalClassifierDoesNotOverrideFallback(t *testing.T) {
 						ExplicitClasses: []string{"EXPOSED"},
 					},
 				},
-				detector: &fakeDetector{dets: []Detection{{Label: "EXPOSED", Score: 0.6, Box: Box{X: 1, Y: 1, W: 2, H: 2}}}},
+				detector: &fakeDetector{
+					dets: []Detection{{Label: "EXPOSED", Score: 0.6, Box: Box{X: 1, Y: 1, W: 2, H: 2}}},
+				},
 			},
 		}
-		e, err := newEngineFromEntries(entries, "balanced", Options{Log: discardLogger()})
-		if err != nil {
-			t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-		}
+		e := newEngineFromEntries(entries, "balanced", Options{Log: discardLogger()})
 
 		got, err := e.Analyze(context.Background(), quadPNG(t))
 		if err != nil {
@@ -482,13 +462,10 @@ func TestAnalyzeFailedOptionalClassifierDoesNotOverrideFallback(t *testing.T) {
 
 func TestAnalyzeWarningsDedupedBoundedAndLogged(t *testing.T) {
 	t.Run("deduped by model id", func(t *testing.T) {
-		e, err := newEngineFromEntries([]modelEntry{
+		e := newEngineFromEntries([]modelEntry{
 			classifierEntry("anime", RoleAnime, false, &fakeClassifier{err: errors.New("down")}),
 		}, "balanced", Options{Log: discardLogger()})
-		if err != nil {
-			t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-		}
-		for run := 0; run < 3; run++ {
+		for range 3 {
 			if _, err := e.Analyze(context.Background(), quadPNG(t)); err != nil {
 				t.Fatalf("Analyze() error = %v, want nil", err)
 			}
@@ -500,14 +477,11 @@ func TestAnalyzeWarningsDedupedBoundedAndLogged(t *testing.T) {
 
 	t.Run("bounded", func(t *testing.T) {
 		var entries []modelEntry
-		for i := 0; i < maxEngineWarnings+6; i++ {
+		for i := range maxEngineWarnings + 6 {
 			id := fmt.Sprintf("m%03d", i)
 			entries = append(entries, classifierEntry(id, RoleAnime, false, &fakeClassifier{err: errors.New("down")}))
 		}
-		e, err := newEngineFromEntries(entries, "balanced", Options{Log: discardLogger()})
-		if err != nil {
-			t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-		}
+		e := newEngineFromEntries(entries, "balanced", Options{Log: discardLogger()})
 		if _, err := e.Analyze(context.Background(), quadPNG(t)); err != nil {
 			t.Fatalf("Analyze() error = %v, want nil", err)
 		}
@@ -523,12 +497,9 @@ func TestAnalyzeWarningsDedupedBoundedAndLogged(t *testing.T) {
 	t.Run("logged through Options.Log", func(t *testing.T) {
 		var buf bytes.Buffer
 		logger := slog.New(slog.NewTextHandler(&buf, nil))
-		e, err := newEngineFromEntries([]modelEntry{
+		e := newEngineFromEntries([]modelEntry{
 			classifierEntry("anime", RoleAnime, false, &fakeClassifier{err: errors.New("down")}),
 		}, "balanced", Options{Log: logger})
-		if err != nil {
-			t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-		}
 		if _, err := e.Analyze(context.Background(), quadPNG(t)); err != nil {
 			t.Fatalf("Analyze() error = %v, want nil", err)
 		}
@@ -540,10 +511,7 @@ func TestAnalyzeWarningsDedupedBoundedAndLogged(t *testing.T) {
 }
 
 func TestNewEngineFromEntriesProfileAndWarnings(t *testing.T) {
-	e, err := newEngineFromEntries(nil, "fast", Options{})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
+	e := newEngineFromEntries(nil, "fast", Options{})
 	if got := e.Profile(); got != "fast" {
 		t.Errorf("Profile() = %q, want %q", got, "fast")
 	}
@@ -755,16 +723,14 @@ func TestNewEngineNoModelsLoadedFails(t *testing.T) {
 	if !strings.Contains(err.Error(), `"only"`) || !strings.Contains(err.Error(), "incompatible model") {
 		t.Errorf("NewEngine() error = %v, want it to carry the per-model failure reason", err)
 	}
-	if logged := buf.String(); !strings.Contains(logged, "incompatible model") || !strings.Contains(logged, "model=only") {
+	if logged := buf.String(); !strings.Contains(logged, "incompatible model") ||
+		!strings.Contains(logged, "model=only") {
 		t.Errorf("log output = %q, want the per-model failure logged", logged)
 	}
 }
 
 func TestClose(t *testing.T) {
-	e, err := newEngineFromEntries(nil, "balanced", Options{})
-	if err != nil {
-		t.Fatalf("newEngineFromEntries() error = %v, want nil", err)
-	}
+	e := newEngineFromEntries(nil, "balanced", Options{})
 	if err := e.Close(); err != nil {
 		t.Errorf("Close() with no closers error = %v, want nil", err)
 	}

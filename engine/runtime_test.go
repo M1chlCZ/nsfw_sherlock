@@ -177,7 +177,7 @@ func TestInitMissingLib(t *testing.T) {
 			fmt.Fprintln(os.Stderr, "InitRuntime with a missing library returned nil")
 			os.Exit(1)
 		}
-		fmt.Println(err)
+		fmt.Fprintln(os.Stdout, err)
 		os.Exit(0)
 	}
 
@@ -197,7 +197,7 @@ func TestInitMissingLib(t *testing.T) {
 }
 
 func TestModelPoolConcurrency(t *testing.T) {
-	var current, max int32
+	var current, peak int32
 	entered := make(chan struct{}, 6)
 	proceed := make(chan struct{})
 
@@ -206,8 +206,8 @@ func TestModelPoolConcurrency(t *testing.T) {
 			run: func(inputs, outputs []ort.Value) error {
 				n := atomic.AddInt32(&current, 1)
 				for {
-					old := atomic.LoadInt32(&max)
-					if n <= old || atomic.CompareAndSwapInt32(&max, old, n) {
+					old := atomic.LoadInt32(&peak)
+					if n <= old || atomic.CompareAndSwapInt32(&peak, old, n) {
 						break
 					}
 				}
@@ -226,9 +226,9 @@ func TestModelPoolConcurrency(t *testing.T) {
 	defer p.close()
 
 	const perWave = 6
-	for wave := 0; wave < 2; wave++ {
+	for wave := range 2 {
 		results := make(chan error, perWave)
-		for i := 0; i < perWave; i++ {
+		for range perWave {
 			go func() {
 				_, err := p.run(context.Background(), nil, nil)
 				results <- err
@@ -242,13 +242,13 @@ func TestModelPoolConcurrency(t *testing.T) {
 				t.Fatal("more than 2 runs started concurrently")
 			default:
 			}
-			if got := atomic.LoadInt32(&max); got != 2 {
+			if got := atomic.LoadInt32(&peak); got != 2 {
 				t.Fatalf("wave %d: max concurrency = %d, want 2", wave, got)
 			}
 			proceed <- struct{}{}
 			proceed <- struct{}{}
 		}
-		for i := 0; i < perWave; i++ {
+		for range perWave {
 			if err := waitError(t, results, "runs to finish"); err != nil {
 				t.Fatalf("wave %d: run error = %v", wave, err)
 			}
@@ -304,11 +304,11 @@ func TestNewPoolPartialFactoryFailure(t *testing.T) {
 
 func TestModelPoolRunError(t *testing.T) {
 	fakeErr := errors.New("fake inference failure")
-	var calls int32
+	var calls atomic.Int32
 	factory := func() (modelRunner, error) {
 		return &fakeRunner{
 			run: func(inputs, outputs []ort.Value) error {
-				if atomic.AddInt32(&calls, 1) == 1 {
+				if calls.Add(1) == 1 {
 					return fakeErr
 				}
 				return nil
@@ -335,19 +335,19 @@ func TestModelPoolRunError(t *testing.T) {
 	if _, err := p.run(context.Background(), nil, nil); err != nil {
 		t.Fatalf("run after error = %v, want nil", err)
 	}
-	if got := atomic.LoadInt32(&calls); got != 2 {
+	if got := calls.Load(); got != 2 {
 		t.Fatalf("runner calls = %d, want 2", got)
 	}
 }
 
 func TestModelPoolRunContext(t *testing.T) {
-	var calls int32
+	var calls atomic.Int32
 	entered := make(chan struct{}, 1)
 	proceed := make(chan struct{})
 	factory := func() (modelRunner, error) {
 		return &fakeRunner{
 			run: func(inputs, outputs []ort.Value) error {
-				atomic.AddInt32(&calls, 1)
+				calls.Add(1)
 				entered <- struct{}{}
 				<-proceed
 				return nil
@@ -366,7 +366,7 @@ func TestModelPoolRunContext(t *testing.T) {
 	if _, err := p.run(cancelled, nil, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("pre-cancelled run error = %v, want context.Canceled", err)
 	}
-	if got := atomic.LoadInt32(&calls); got != 0 {
+	if got := calls.Load(); got != 0 {
 		t.Fatalf("pre-cancelled run called the runner %d times, want 0", got)
 	}
 
@@ -398,7 +398,7 @@ func TestModelPoolRunContext(t *testing.T) {
 }
 
 func TestModelPoolClose(t *testing.T) {
-	var destroyed int32
+	var destroyed atomic.Int32
 	entered := make(chan struct{}, 2)
 	proceed := make(chan struct{})
 	factory := func() (modelRunner, error) {
@@ -409,7 +409,7 @@ func TestModelPoolClose(t *testing.T) {
 				return nil
 			},
 			destroy: func() error {
-				atomic.AddInt32(&destroyed, 1)
+				destroyed.Add(1)
 				return nil
 			},
 		}, nil
@@ -421,7 +421,7 @@ func TestModelPoolClose(t *testing.T) {
 	}
 
 	results := make(chan error, 2)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		go func() {
 			_, err := p.run(context.Background(), nil, nil)
 			results <- err
@@ -437,17 +437,17 @@ func TestModelPoolClose(t *testing.T) {
 
 	proceed <- struct{}{}
 	proceed <- struct{}{}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := waitError(t, results, "in-flight runs to finish"); !errors.Is(err, errPoolClosed) {
 			t.Fatalf("in-flight run error = %v, want %v", err, errPoolClosed)
 		}
 	}
-	if got := atomic.LoadInt32(&destroyed); got != 2 {
+	if got := destroyed.Load(); got != 2 {
 		t.Fatalf("destroyed sessions = %d, want 2", got)
 	}
 
 	p.close()
-	if got := atomic.LoadInt32(&destroyed); got != 2 {
+	if got := destroyed.Load(); got != 2 {
 		t.Fatalf("second close destroyed sessions: destroyed = %d, want 2", got)
 	}
 }

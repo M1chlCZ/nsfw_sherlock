@@ -50,8 +50,10 @@ func TestCombine(t *testing.T) {
 		wantLegacy  bool
 	}{
 		{
-			name:        "photo high is explicit",
-			outputs:     []ModelOutput{classifierOutput("photo", RolePhoto, map[string]float32{"high": 0.9, "neutral": 0.05})},
+			name: "photo high is explicit",
+			outputs: []ModelOutput{
+				classifierOutput("photo", RolePhoto, map[string]float32{"high": 0.9, "neutral": 0.05}),
+			},
 			wantVerdict: VerdictExplicit,
 			wantNSFW:    0.9,
 			wantLabels:  Labels{Neutral: 0.05, Porn: 0.9},
@@ -59,8 +61,10 @@ func TestCombine(t *testing.T) {
 			wantLegacy:  true,
 		},
 		{
-			name:        "photo medium is suggestive",
-			outputs:     []ModelOutput{classifierOutput("photo", RolePhoto, map[string]float32{"medium": 0.6, "neutral": 0.1})},
+			name: "photo medium is suggestive",
+			outputs: []ModelOutput{
+				classifierOutput("photo", RolePhoto, map[string]float32{"medium": 0.6, "neutral": 0.1}),
+			},
 			wantVerdict: VerdictSuggestive,
 			wantNSFW:    0,
 			wantLabels:  Labels{Neutral: 0.1, Sexy: 0.6},
@@ -68,8 +72,10 @@ func TestCombine(t *testing.T) {
 			wantLegacy:  true,
 		},
 		{
-			name:        "photo low is weighted",
-			outputs:     []ModelOutput{classifierOutput("photo", RolePhoto, map[string]float32{"low": 0.6, "medium": 0})},
+			name: "photo low is weighted",
+			outputs: []ModelOutput{
+				classifierOutput("photo", RolePhoto, map[string]float32{"low": 0.6, "medium": 0}),
+			},
 			wantVerdict: VerdictSFW,
 			wantNSFW:    0,
 			wantLabels:  Labels{Sexy: 0.3},
@@ -77,8 +83,10 @@ func TestCombine(t *testing.T) {
 			wantLegacy:  true,
 		},
 		{
-			name:        "photo sexy fallback key is suggestive",
-			outputs:     []ModelOutput{classifierOutput("photo", RolePhoto, map[string]float32{"sexy": 0.6, "neutral": 0.1})},
+			name: "photo sexy fallback key is suggestive",
+			outputs: []ModelOutput{
+				classifierOutput("photo", RolePhoto, map[string]float32{"sexy": 0.6, "neutral": 0.1}),
+			},
 			wantVerdict: VerdictSuggestive,
 			wantNSFW:    0,
 			wantLabels:  Labels{Neutral: 0.1, Sexy: 0.6},
@@ -86,8 +94,10 @@ func TestCombine(t *testing.T) {
 			wantLegacy:  true,
 		},
 		{
-			name:        "photo medium is capped at one",
-			outputs:     []ModelOutput{classifierOutput("photo", RolePhoto, map[string]float32{"medium": 1.5, "neutral": 0.1})},
+			name: "photo medium is capped at one",
+			outputs: []ModelOutput{
+				classifierOutput("photo", RolePhoto, map[string]float32{"medium": 1.5, "neutral": 0.1}),
+			},
 			wantVerdict: VerdictSuggestive,
 			wantNSFW:    0,
 			wantLabels:  Labels{Neutral: 0.1, Sexy: 1},
@@ -113,8 +123,10 @@ func TestCombine(t *testing.T) {
 			wantLegacy:  true,
 		},
 		{
-			name:        "anime r18 is explicit",
-			outputs:     []ModelOutput{classifierOutput("anime", RoleAnime, map[string]float32{"safe": 0.1, "r18": 0.8})},
+			name: "anime r18 is explicit",
+			outputs: []ModelOutput{
+				classifierOutput("anime", RoleAnime, map[string]float32{"safe": 0.1, "r18": 0.8}),
+			},
 			wantVerdict: VerdictExplicit,
 			wantNSFW:    0.8,
 			wantLabels:  Labels{Drawings: 0.1, Hentai: 0.8},
@@ -156,18 +168,30 @@ func TestCombine(t *testing.T) {
 			wantLegacy:  false,
 		},
 		{
-			name:        "compat copies labels verbatim",
-			profile:     "compat",
-			outputs:     []ModelOutput{classifierOutput("compat", RoleCompat, map[string]float32{"drawings": 0.05, "hentai": 0.07, "neutral": 0.11, "porn": 0.55, "sexy": 0.22})},
+			name:    "compat copies labels verbatim",
+			profile: "compat",
+			outputs: []ModelOutput{
+				classifierOutput(
+					"compat",
+					RoleCompat,
+					map[string]float32{"drawings": 0.05, "hentai": 0.07, "neutral": 0.11, "porn": 0.55, "sexy": 0.22},
+				),
+			},
 			wantVerdict: VerdictExplicit,
 			wantNSFW:    0.55,
 			wantLabels:  Labels{Drawings: 0.05, Hentai: 0.07, Neutral: 0.11, Porn: 0.55, Sexy: 0.22},
 			wantLegacy:  true,
 		},
 		{
-			name:        "compat with explicit detection feeds the nsfw scalar",
-			profile:     "compat",
-			outputs:     []ModelOutput{classifierOutput("compat", RoleCompat, map[string]float32{"drawings": 0.05, "hentai": 0.07, "neutral": 0.11, "porn": 0.01, "sexy": 0.02})},
+			name:    "compat with explicit detection feeds the nsfw scalar",
+			profile: "compat",
+			outputs: []ModelOutput{
+				classifierOutput(
+					"compat",
+					RoleCompat,
+					map[string]float32{"drawings": 0.05, "hentai": 0.07, "neutral": 0.11, "porn": 0.01, "sexy": 0.02},
+				),
+			},
 			dets:        []Detection{detection("EXPOSED", 0.4)},
 			wantVerdict: VerdictExplicit,
 			wantNSFW:    0.4,
@@ -176,8 +200,10 @@ func TestCombine(t *testing.T) {
 			wantLegacy:  true,
 		},
 		{
-			name:        "binary photo model maps normal and nsfw",
-			outputs:     []ModelOutput{classifierOutput("photo", RolePhoto, map[string]float32{"normal": 0.6, "nsfw": 0.4})},
+			name: "binary photo model maps normal and nsfw",
+			outputs: []ModelOutput{
+				classifierOutput("photo", RolePhoto, map[string]float32{"normal": 0.6, "nsfw": 0.4}),
+			},
 			wantVerdict: VerdictSFW,
 			wantNSFW:    0.4,
 			wantLabels:  Labels{Neutral: 0.6, Porn: 0.4},
@@ -185,8 +211,10 @@ func TestCombine(t *testing.T) {
 			wantLegacy:  true,
 		},
 		{
-			name:        "photo sfw and porn fallback keys",
-			outputs:     []ModelOutput{classifierOutput("photo", RolePhoto, map[string]float32{"sfw": 0.97, "nsfw": 0.02, "porn": 0.01})},
+			name: "photo sfw and porn fallback keys",
+			outputs: []ModelOutput{
+				classifierOutput("photo", RolePhoto, map[string]float32{"sfw": 0.97, "nsfw": 0.02, "porn": 0.01}),
+			},
 			wantVerdict: VerdictSFW,
 			wantNSFW:    0.02,
 			wantLabels:  Labels{Neutral: 0.97, Porn: 0.02},
@@ -379,7 +407,11 @@ func TestCombineNonFiniteScores(t *testing.T) {
 	nan := float32(math.NaN())
 	inf := float32(math.Inf(1))
 	outputs := []ModelOutput{
-		classifierOutput("photo", RolePhoto, map[string]float32{"high": nan, "medium": inf, "low": nan, "neutral": inf}),
+		classifierOutput(
+			"photo",
+			RolePhoto,
+			map[string]float32{"high": nan, "medium": inf, "low": nan, "neutral": inf},
+		),
 		classifierOutput("anime", RoleAnime, map[string]float32{"safe": nan, "r15": inf, "r18": nan}),
 	}
 	dets := []Detection{{Label: "EXPOSED", Score: nan, Box: Box{X: nan, Y: inf, W: nan, H: inf}}}

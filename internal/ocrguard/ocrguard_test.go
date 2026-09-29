@@ -23,7 +23,7 @@ func TestGuardPassesContextAndImage(t *testing.T) {
 	var gotCtx context.Context
 	var gotImg []byte
 	guard := Guard(func(c context.Context, img []byte) (bool, error) {
-		gotCtx, gotImg = c, img
+		gotCtx, gotImg = c, img //nolint:fatcontext // Capture the context delivered to the checker for assertion.
 		return true, nil
 	}, 1, time.Second)
 

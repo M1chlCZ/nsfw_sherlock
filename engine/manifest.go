@@ -103,7 +103,7 @@ type DetectorSpec struct {
 
 // LoadManifest reads and validates a manifest JSON file.
 func LoadManifest(path string) (*Manifest, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // Manifest/model paths come from operator configuration, not requests.
 	if err != nil {
 		return nil, fmt.Errorf("engine: open manifest: %w", err)
 	}
@@ -249,20 +249,27 @@ func (m *Model) validate() error {
 	if err := validateTensorNames(m.OutputNames, "output_names"); err != nil {
 		return err
 	}
-	if m.Input.Width <= 0 || m.Input.Height <= 0 || m.Input.Width > MaxInputDimension || m.Input.Height > MaxInputDimension {
-		return fmt.Errorf("invalid input size %dx%d: must be between 1 and %d", m.Input.Width, m.Input.Height, MaxInputDimension)
+	if m.Input.Width <= 0 || m.Input.Height <= 0 || m.Input.Width > MaxInputDimension ||
+		m.Input.Height > MaxInputDimension {
+		return fmt.Errorf(
+			"invalid input size %dx%d: must be between 1 and %d",
+			m.Input.Width,
+			m.Input.Height,
+			MaxInputDimension,
+		)
 	}
 	if m.Input.Resize != "" && m.Input.Resize != ResizeStretch {
 		return fmt.Errorf("unsupported resize mode %q", m.Input.Resize)
 	}
-	if math.IsNaN(float64(m.Input.CropPct)) || m.Input.CropPct < 0 || m.Input.CropPct > 1 || (m.Input.CropPct > 0 && m.Input.CropPct < MinCropPct) {
+	if math.IsNaN(float64(m.Input.CropPct)) || m.Input.CropPct < 0 || m.Input.CropPct > 1 ||
+		(m.Input.CropPct > 0 && m.Input.CropPct < MinCropPct) {
 		return fmt.Errorf("input: crop_pct %v must be 0 or in [%v, 1]", m.Input.CropPct, MinCropPct)
 	}
 	if err := validateInterpolation(m.Input.Interpolation); err != nil {
 		return fmt.Errorf("input: %w", err)
 	}
 	if m.Input.Normalize {
-		for c := 0; c < 3; c++ {
+		for c := range 3 {
 			if !isFinite(m.Input.Mean[c]) {
 				return fmt.Errorf("input: mean[%d] must be finite", c)
 			}
@@ -343,10 +350,20 @@ func validateRoleLabels(role string, labels []string) error {
 	switch role {
 	case RolePhoto:
 		if !hasAny("neutral", "sfw", "normal") {
-			return fmt.Errorf("classifier: photo labels missing a neutral label (one of %q, %q, %q)", "neutral", "sfw", "normal")
+			return fmt.Errorf(
+				"classifier: photo labels missing a neutral label (one of %q, %q, %q)",
+				"neutral",
+				"sfw",
+				"normal",
+			)
 		}
 		if !hasAny("high", "nsfw", "porn") {
-			return fmt.Errorf("classifier: photo labels missing a severity label (one of %q, %q, %q)", "high", "nsfw", "porn")
+			return fmt.Errorf(
+				"classifier: photo labels missing a severity label (one of %q, %q, %q)",
+				"high",
+				"nsfw",
+				"porn",
+			)
 		}
 	case RoleAnime:
 		for _, required := range []string{"safe", "r15", "r18"} {

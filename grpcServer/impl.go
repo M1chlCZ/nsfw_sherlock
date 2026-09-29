@@ -1,4 +1,4 @@
-package grpcServer
+package grpcserver
 
 import (
 	"context"
@@ -128,7 +128,7 @@ func (s *Server) analyze(ctx context.Context, payload string) (engine.Analysis, 
 	}
 	analysis, err := s.analyzer.Analyze(ctx, data)
 	if err != nil {
-		s.log.Warn("grpc: analyze failed", "error", err)
+		s.log.WarnContext(ctx, "grpc: analyze failed", "error", err)
 		return engine.Analysis{}, nil, rpcError(err)
 	}
 	return analysis, data, nil
@@ -140,7 +140,7 @@ func (s *Server) textNSFW(ctx context.Context, data []byte) (bool, error) {
 	}
 	nsfw, err := s.checker(ctx, data)
 	if err != nil {
-		s.log.Warn("grpc: text check failed", "error", err)
+		s.log.WarnContext(ctx, "grpc: text check failed", "error", err)
 	}
 	return nsfw, err
 }

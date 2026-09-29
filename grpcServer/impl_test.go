@@ -1,4 +1,4 @@
-package grpcServer
+package grpcserver
 
 import (
 	"context"
@@ -65,9 +65,9 @@ func override[T any](t *testing.T, target *T, value T) {
 	t.Cleanup(func() { *target = previous })
 }
 
-func encodePayload(t *testing.T, data string) string {
+func encodePayload(t *testing.T) string {
 	t.Helper()
-	return base64.StdEncoding.EncodeToString([]byte(data))
+	return base64.StdEncoding.EncodeToString([]byte(testPayload))
 }
 
 func newTestClient(t *testing.T, analyzer Analyzer, checker TextChecker) grpcModels.NSFWClient {
@@ -114,7 +114,7 @@ func TestNewServerNilAnalyzerPanics(t *testing.T) {
 
 func TestDetectCheckerTimeout(t *testing.T) {
 	override(t, &ocrTimeout, 20*time.Millisecond)
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
 	checker := func(context.Context, []byte) (bool, error) {
@@ -128,7 +128,7 @@ func TestDetectCheckerTimeout(t *testing.T) {
 }
 
 func TestDetectAnalyzerPanic(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	analyzer := &fakeAnalyzer{fn: func(context.Context, []byte) (engine.Analysis, error) {
 		panic("analyzer exploded")
 	}}
@@ -139,7 +139,7 @@ func TestDetectAnalyzerPanic(t *testing.T) {
 }
 
 func TestDetectCheckerPanic(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	checker := func(context.Context, []byte) (bool, error) { panic("checker exploded") }
 	client := newTestClient(t, &fakeAnalyzer{}, checker)
 
@@ -148,7 +148,7 @@ func TestDetectCheckerPanic(t *testing.T) {
 }
 
 func TestDetect(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 
 	t.Run("nsfwPicture and nsfwText", func(t *testing.T) {
 		analyzer := &fakeAnalyzer{analysis: engine.Analysis{Labels: engine.Labels{Porn: 0.9}}}
@@ -257,7 +257,7 @@ func TestDetectInvalidPayload(t *testing.T) {
 }
 
 func TestDetectAnalyzerErrors(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	cases := []struct {
 		name string
 		err  error
@@ -279,7 +279,7 @@ func TestDetectAnalyzerErrors(t *testing.T) {
 }
 
 func TestDetectCheckerErrors(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	cases := []struct {
 		name string
 		err  error
@@ -301,7 +301,7 @@ func TestDetectCheckerErrors(t *testing.T) {
 }
 
 func TestDetectLabelsCheckerError(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	checker := func(context.Context, []byte) (bool, error) { return false, errors.New("ocr down") }
 	client := newTestClient(t, &fakeAnalyzer{}, checker)
 
@@ -310,7 +310,7 @@ func TestDetectLabelsCheckerError(t *testing.T) {
 }
 
 func TestAnalyzeCheckerError(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	checker := func(context.Context, []byte) (bool, error) { return false, errors.New("ocr down") }
 	client := newTestClient(t, &fakeAnalyzer{}, checker)
 
@@ -319,7 +319,7 @@ func TestAnalyzeCheckerError(t *testing.T) {
 }
 
 func TestDetectLabels(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	analysis := engine.Analysis{Labels: engine.Labels{
 		Drawings: 0.1,
 		Hentai:   0.2,
@@ -353,7 +353,7 @@ func TestDetectLabels(t *testing.T) {
 }
 
 func TestDetectLabelsErrors(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 
 	_, err := newTestClient(t, &fakeAnalyzer{err: engine.ErrUnsupportedImage}, nil).DetectLabels(
 		context.Background(), &grpcModels.NSFWLabelsRequest{Base64: payload})
@@ -365,7 +365,7 @@ func TestDetectLabelsErrors(t *testing.T) {
 }
 
 func TestAnalyze(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	analysis := engine.Analysis{
 		Verdict: engine.VerdictExplicit,
 		NSFW:    0.9,
@@ -441,7 +441,7 @@ func TestAnalyze(t *testing.T) {
 }
 
 func TestAnalyzeMinimal(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	client := newTestClient(t, &fakeAnalyzer{}, nil)
 
 	resp, err := client.Analyze(context.Background(), &grpcModels.NSFWRequest{Base64: payload})
@@ -469,7 +469,7 @@ func TestAnalyzeMinimal(t *testing.T) {
 }
 
 func TestAnalyzeErrors(t *testing.T) {
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 
 	_, err := newTestClient(t, &fakeAnalyzer{err: fmt.Errorf("engine: %w", engine.ErrImageTooLarge)}, nil).Analyze(
 		context.Background(), &grpcModels.NSFWRequest{Base64: payload})
@@ -517,7 +517,7 @@ func TestStartGrpcServerListenError(t *testing.T) {
 
 func TestStartGrpcServerGracefulDrain(t *testing.T) {
 	port := freePort(t)
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	started := make(chan struct{})
 	release := make(chan struct{})
 	analyzer := &fakeAnalyzer{fn: func(context.Context, []byte) (engine.Analysis, error) {
@@ -575,7 +575,7 @@ func TestStartGrpcServerGracefulDrain(t *testing.T) {
 func TestStartGrpcServerForceStop(t *testing.T) {
 	override(t, &gracefulTimeout, 50*time.Millisecond)
 	port := freePort(t)
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 	started := make(chan struct{})
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })

@@ -115,16 +115,16 @@ func softmax(scores []float32) ([]float32, error) {
 	if err := validateScores(scores); err != nil {
 		return nil, fmt.Errorf("softmax: %w", err)
 	}
-	max := float64(scores[0])
+	maxScore := float64(scores[0])
 	for _, s := range scores[1:] {
-		if float64(s) > max {
-			max = float64(s)
+		if float64(s) > maxScore {
+			maxScore = float64(s)
 		}
 	}
 	out := make([]float32, len(scores))
 	sum := 0.0
 	for i, s := range scores {
-		p := math.Exp(float64(s) - max)
+		p := math.Exp(float64(s) - maxScore)
 		out[i] = float32(p)
 		sum += p
 	}

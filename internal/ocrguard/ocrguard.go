@@ -7,7 +7,11 @@ import (
 )
 
 // Guard bounds f to concurrency in-flight calls and a per-call timeout.
-func Guard(f func(ctx context.Context, img []byte) (bool, error), concurrency int, timeout time.Duration) func(ctx context.Context, img []byte) (bool, error) {
+func Guard(
+	f func(ctx context.Context, img []byte) (bool, error),
+	concurrency int,
+	timeout time.Duration,
+) func(ctx context.Context, img []byte) (bool, error) {
 	if f == nil {
 		return nil
 	}

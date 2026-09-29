@@ -12,6 +12,10 @@ const (
 type Options struct {
 	// Profile names the manifest profile to load.
 	Profile string
+	// Provider selects cpu, cuda, or migraphx (ROCm).
+	Provider string
+	// DeviceID selects the GPU device index.
+	DeviceID int
 	// ModelsDir is the directory holding the model files.
 	ModelsDir string
 	// PoolSize is the number of ONNX sessions created per model.
@@ -27,6 +31,9 @@ type Options struct {
 }
 
 func (o Options) withDefaults() Options {
+	if o.Provider == "" {
+		o.Provider = "cpu"
+	}
 	if o.Profile == "" {
 		o.Profile = defaultProfile
 	}

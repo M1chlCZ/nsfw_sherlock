@@ -16,7 +16,7 @@ var errPoolClosed = errors.New("engine: model pool closed")
 
 var (
 	runtimeOnce sync.Once
-	runtimeErr  error
+	errRuntime  error
 )
 
 var executablePath = os.Executable
@@ -29,15 +29,21 @@ func InitRuntime(libPath string) error {
 			path = resolveLibPath()
 		}
 		if path == "" {
-			runtimeErr = fmt.Errorf("engine: onnxruntime shared library not found; set ORT_LIB or run scripts/fetch-models.sh --ort-only")
+			errRuntime = fmt.Errorf(
+				"engine: onnxruntime shared library not found; set ORT_LIB or run scripts/fetch-models.sh --ort-only",
+			)
 			return
 		}
 		ort.SetSharedLibraryPath(path)
 		if err := ort.InitializeEnvironment(); err != nil {
-			runtimeErr = fmt.Errorf("engine: initialize onnxruntime %q: %w; set ORT_LIB or run scripts/fetch-models.sh --ort-only", path, err)
+			errRuntime = fmt.Errorf(
+				"engine: initialize onnxruntime %q: %w; set ORT_LIB or run scripts/fetch-models.sh --ort-only",
+				path,
+				err,
+			)
 		}
 	})
-	return runtimeErr
+	return errRuntime
 }
 
 func resolveLibPath() string {
@@ -93,20 +99,38 @@ type modelPool struct {
 	once   sync.Once
 }
 
-func newModelPool(modelPath string, inputNames, outputNames []string, size int) (*modelPool, error) {
-	factory := func() (modelRunner, error) {
-		return ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, nil)
+func newModelPool(modelPath string, inputNames, outputNames []string, opts Options) (*modelPool, error) {
+	sessionOpts, err := newSessionOptions(opts.Provider, opts.DeviceID)
+	if err != nil {
+		return nil, err
 	}
-	return newPool(modelPath, factory, size, len(outputNames), func(inputData []float32, shape ort.Shape) (ort.Value, error) {
-		return ort.NewTensor(shape, inputData)
-	})
+	if sessionOpts != nil {
+		defer func() { _ = sessionOpts.Destroy() }()
+	}
+	factory := func() (modelRunner, error) {
+		return ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, sessionOpts)
+	}
+	return newPool(
+		modelPath,
+		factory,
+		opts.PoolSize,
+		len(outputNames),
+		func(inputData []float32, shape ort.Shape) (ort.Value, error) {
+			return ort.NewTensor(shape, inputData)
+		},
+	)
 }
 
 func newModelPoolWithFactory(factory func() (modelRunner, error), size int) (*modelPool, error) {
 	return newPool("", factory, size, 0, nil)
 }
 
-func newPool(modelPath string, factory func() (modelRunner, error), size, outputCount int, buildInput inputBuilder) (*modelPool, error) {
+func newPool(
+	modelPath string,
+	factory func() (modelRunner, error),
+	size, outputCount int,
+	buildInput inputBuilder,
+) (*modelPool, error) {
 	if size < 1 {
 		return nil, fmt.Errorf("engine: model %q: pool size %d must be at least 1", modelPath, size)
 	}
@@ -127,7 +151,12 @@ func newPool(modelPath string, factory func() (modelRunner, error), size, output
 		}
 		if runner == nil {
 			p.close()
-			return nil, fmt.Errorf("engine: model %q: model runner factory returned nil for session %d/%d", modelPath, i, size)
+			return nil, fmt.Errorf(
+				"engine: model %q: model runner factory returned nil for session %d/%d",
+				modelPath,
+				i,
+				size,
+			)
 		}
 		p.runners <- runner
 	}

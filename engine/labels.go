@@ -25,13 +25,12 @@ func (l *Labels) GetLabels() Labels {
 	return *l
 }
 
-func (l *Labels) NSFW(threshold float32) bool {
+func (l *Labels) NSFW(_ float32) bool {
 	if l.Neutral > 0.75 || l.Drawings > 0.75 {
 		if l.Porn < 0.1 && l.Sexy < 0.1 {
 			return false
-		} else {
-			return true
 		}
+		return true
 	}
 
 	if l.Porn > 0.1 {

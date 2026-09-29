@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-// New returns a logger that writes to os.Stdout with the given level and format.
+// New returns a logger that writes to [os.Stdout] with the given level and format.
 func New(level, format string) (*slog.Logger, error) {
 	return NewWithWriter(os.Stdout, level, format)
 }

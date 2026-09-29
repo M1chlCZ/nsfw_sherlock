@@ -9,6 +9,6 @@ func Enabled() bool { return false }
 func Warmup() error { return nil }
 
 // DetectText is a no-op when OCR is not compiled in.
-func DetectText(data []byte) (bool, error) {
+func DetectText(_ []byte) (bool, error) {
 	return false, nil
 }

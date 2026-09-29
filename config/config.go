@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"math"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -44,6 +46,8 @@ type Config struct {
 	Port            int
 	ModelsDir       string
 	Manifest        string
+	ORTProvider     string
+	ORTDeviceID     int
 	ORTLib          string
 	Profile         string
 	AllowDegraded   bool
@@ -60,6 +64,7 @@ type Config struct {
 func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		AppEnv:          defaultAppEnv,
+		ORTProvider:     "cpu",
 		Port:            defaultPort,
 		ModelsDir:       defaultModelsDir,
 		Manifest:        defaultManifest,
@@ -95,6 +100,9 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	cfg.ORTLib = stringFromEnv(getenv, envORTLib, cfg.ORTLib)
+	if err := cfg.loadGPU(getenv); err != nil {
+		return Config{}, err
+	}
 
 	rawProfile := getenv(envProfile)
 	if profile := strings.TrimSpace(rawProfile); profile != "" {
@@ -121,7 +129,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	if cfg.MaxImagePixels <= 0 {
-		return Config{}, fmt.Errorf("config: %s: value %d must be greater than 0", envMaxImagePixels, cfg.MaxImagePixels)
+		return Config{}, fmt.Errorf(
+			"config: %s: value %d must be greater than 0",
+			envMaxImagePixels,
+			cfg.MaxImagePixels,
+		)
 	}
 	if cfg.SessionPoolSize, err = intFromEnv(getenv, envSessionPoolSize, cfg.SessionPoolSize); err != nil {
 		return Config{}, err
@@ -130,7 +142,15 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("config: %s: value %d must be at least 1", envSessionPoolSize, cfg.SessionPoolSize)
 	}
 
-	if cfg.LogLevel, err = enumFromEnv(getenv, envLogLevel, cfg.LogLevel, "debug", "info", "warn", "error"); err != nil {
+	if cfg.LogLevel, err = enumFromEnv(
+		getenv,
+		envLogLevel,
+		cfg.LogLevel,
+		"debug",
+		"info",
+		"warn",
+		"error",
+	); err != nil {
 		return Config{}, err
 	}
 	if cfg.LogFormat, err = enumFromEnv(getenv, envLogFormat, cfg.LogFormat, "text", "json"); err != nil {
@@ -199,10 +219,8 @@ func enumFromEnv(getenv func(string) string, key, def string, allowed ...string)
 	if value == "" {
 		return def, nil
 	}
-	for _, a := range allowed {
-		if value == a {
-			return value, nil
-		}
+	if slices.Contains(allowed, value) {
+		return value, nil
 	}
 	return "", fmt.Errorf("config: %s: invalid value %q (want one of %s)", key, raw, strings.Join(allowed, ", "))
 }
@@ -212,4 +230,30 @@ func stringFromEnv(getenv func(string) string, key, def string) string {
 		return value
 	}
 	return def
+}
+
+func (cfg *Config) loadGPU(getenv func(string) string) error {
+	var err error
+	if cfg.ORTProvider, err = enumFromEnv(
+		getenv,
+		"ORT_PROVIDER",
+		cfg.ORTProvider,
+		"cpu",
+		"cuda",
+		"migraphx",
+		"rocm",
+	); err != nil {
+		return err
+	}
+	if cfg.ORTProvider == "rocm" {
+		cfg.ORTProvider = "migraphx"
+	}
+	if cfg.ORTDeviceID, err = intFromEnv(getenv, "ORT_DEVICE_ID", cfg.ORTDeviceID); err != nil {
+		return err
+	}
+	if cfg.ORTDeviceID < 0 || cfg.ORTDeviceID > math.MaxInt32 {
+		return fmt.Errorf("config: ORT_DEVICE_ID must be in 0..%d", math.MaxInt32)
+	}
+
+	return nil
 }

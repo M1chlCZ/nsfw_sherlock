@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
+    branches: ["**"]
   pull_request:
+  workflow_dispatch:
+  workflow_call:
 
 jobs:
   test:
@@ -28,13 +31,18 @@ jobs:
         run: go test ./... -count=1 -race
 
       - name: Test OCR
-        run: go test -tags ocr ./textcheck/... -count=1 -race
+        run: go test -tags ocr ./... -count=1 -race
 
       - name: Vulnerability scan
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Lint
         uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
+
+      - name: Lint OCR
+        run: golangci-lint run --build-tags ocr
 
   build:
     name: Docker build and smoke test
@@ -58,12 +66,12 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Start container
-        run: docker run -d --rm --name nsfw-sherlock -p 4000:4000 nsfw-sherlock:ci
+        run: docker run -d --rm --name nsfw-sherlock -e PORT=4100 -p 4000:4100 nsfw-sherlock:ci
 
       - name: Wait for health
         run: |
           for attempt in $(seq 1 60); do
-            if curl -fsS http://localhost:4000/ping >/dev/null 2>&1; then
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' nsfw-sherlock)" = "healthy" ]; then
               echo "container healthy after ${attempt}s"
               exit 0
             fi

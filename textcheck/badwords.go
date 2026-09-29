@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"unicode"
 )
 
 //go:embed bad_words_fallback.txt
@@ -51,7 +52,10 @@ func Loaded() bool {
 func ContainsBadWords(text string) []string {
 	lowerText := strings.ToLower(text)
 	filteredText := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || r == ' ' {
+		if unicode.IsSpace(r) {
+			return ' '
+		}
+		if r >= 'a' && r <= 'z' {
 			return r
 		}
 		return -1

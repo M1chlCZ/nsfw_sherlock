@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	successMessage    = "success"
 	serverTimeout     = 240 * time.Second
 	bodyLimitOverhead = 64 << 10
 	bodyLimitFloor    = 1 << 20
@@ -54,7 +55,13 @@ func NewApp(cfg config.Config, analyzer Analyzer, checker TextChecker, log *slog
 	return newApp(context.Background(), cfg, analyzer, checker, log)
 }
 
-func newApp(baseCtx context.Context, cfg config.Config, analyzer Analyzer, checker TextChecker, log *slog.Logger) *fiber.App {
+func newApp(
+	baseCtx context.Context,
+	cfg config.Config,
+	analyzer Analyzer,
+	checker TextChecker,
+	log *slog.Logger,
+) *fiber.App {
 	if analyzer == nil {
 		panic("web: NewApp: nil analyzer")
 	}
@@ -92,7 +99,13 @@ func newApp(baseCtx context.Context, cfg config.Config, analyzer Analyzer, check
 }
 
 // StartWebServer serves the API on :cfg.Port until ctx is cancelled.
-func StartWebServer(ctx context.Context, cfg config.Config, analyzer Analyzer, checker TextChecker, log *slog.Logger) error {
+func StartWebServer(
+	ctx context.Context,
+	cfg config.Config,
+	analyzer Analyzer,
+	checker TextChecker,
+	log *slog.Logger,
+) error {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -103,7 +116,7 @@ func StartWebServer(ctx context.Context, cfg config.Config, analyzer Analyzer, c
 	app := newApp(serverCtx, cfg, analyzer, checker, log)
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	ln, err := net.Listen("tcp", addr)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("web: cannot listen on %s: %w", addr, err)
 	}
@@ -120,7 +133,7 @@ func StartWebServer(ctx context.Context, cfg config.Config, analyzer Analyzer, c
 	case <-ctx.Done():
 	}
 
-	log.Info("web: shutting down HTTP server", "timeout", timeout)
+	log.InfoContext(ctx, "web: shutting down HTTP server", "timeout", timeout)
 	cancelRequests()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -157,10 +170,11 @@ type labelsResponse struct {
 }
 
 type analyzeResponse struct {
+	engine.Analysis
+
 	Status   string `json:"status"`
 	Message  string `json:"message"`
 	NSFWText bool   `json:"nsfwText"`
-	engine.Analysis
 }
 
 func (h *handlers) picCheck(c fiber.Ctx) error {
@@ -174,7 +188,7 @@ func (h *handlers) picCheck(c fiber.Ctx) error {
 	}
 	return c.JSON(checkResponse{
 		Status:   "ok",
-		Message:  "success",
+		Message:  successMessage,
 		NSFWText: nsfwText,
 		NSFWPic:  analysis.LegacyNSFW(),
 	})
@@ -191,7 +205,7 @@ func (h *handlers) picLabels(c fiber.Ctx) error {
 	}
 	return c.JSON(labelsResponse{
 		Status:   "ok",
-		Message:  "success",
+		Message:  successMessage,
 		Drawings: analysis.Labels.Drawings,
 		Hentai:   analysis.Labels.Hentai,
 		Neutral:  analysis.Labels.Neutral,
@@ -212,7 +226,7 @@ func (h *handlers) picAnalyze(c fiber.Ctx) error {
 	}
 	return c.JSON(analyzeResponse{
 		Status:   "ok",
-		Message:  "success",
+		Message:  successMessage,
 		NSFWText: nsfwText,
 		Analysis: analysis,
 	})
@@ -345,8 +359,7 @@ func requestLogger(log *slog.Logger) fiber.Handler {
 }
 
 func errorStatus(err error) int {
-	var fe *fiber.Error
-	if errors.As(err, &fe) {
+	if fe, ok := errors.AsType[*fiber.Error](err); ok {
 		return fe.Code
 	}
 	return fiber.StatusInternalServerError

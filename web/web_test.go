@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -90,7 +91,7 @@ func (h *captureHandler) statuses() []int {
 }
 
 func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func override[T any](t *testing.T, target *T, value T) {
@@ -177,12 +178,7 @@ func assertLegacyError(t *testing.T, body []byte) {
 }
 
 func containsStatus(statuses []int, want int) bool {
-	for _, status := range statuses {
-		if status == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(statuses, want)
 }
 
 func TestPing(t *testing.T) {
@@ -359,7 +355,19 @@ func TestPicAnalyzeRichResponse(t *testing.T) {
 	}
 	fields := decodeJSON(t, body)
 
-	wantKeys := []string{"status", "message", "nsfwText", "verdict", "nsfw", "labels", "photo", "anime", "detections", "models", "elapsedMs"}
+	wantKeys := []string{
+		"status",
+		"message",
+		"nsfwText",
+		"verdict",
+		"nsfw",
+		"labels",
+		"photo",
+		"anime",
+		"detections",
+		"models",
+		"elapsedMs",
+	}
 	if len(fields) != len(wantKeys) {
 		t.Errorf("response has %d fields, want %d: %v", len(fields), len(wantKeys), fields)
 	}
@@ -476,8 +484,16 @@ func TestPicEngineErrors(t *testing.T) {
 		err        error
 		wantStatus int
 	}{
-		{"image too large", fmt.Errorf("engine: model %q: %w", "m", engine.ErrImageTooLarge), http.StatusRequestEntityTooLarge},
-		{"unsupported image", fmt.Errorf("engine: model %q: %w", "m", engine.ErrUnsupportedImage), http.StatusBadRequest},
+		{
+			"image too large",
+			fmt.Errorf("engine: model %q: %w", "m", engine.ErrImageTooLarge),
+			http.StatusRequestEntityTooLarge,
+		},
+		{
+			"unsupported image",
+			fmt.Errorf("engine: model %q: %w", "m", engine.ErrUnsupportedImage),
+			http.StatusBadRequest,
+		},
 		{"deadline exceeded", fmt.Errorf("engine: %w", context.DeadlineExceeded), http.StatusGatewayTimeout},
 		{"generic error", errors.New("boom"), http.StatusInternalServerError},
 	}
@@ -689,12 +705,10 @@ func TestConcurrentRequestsBounded(t *testing.T) {
 	results := make([]result, total)
 	var wg sync.WaitGroup
 	for i := range total {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			status, _, err := send(app, newJSONRequest(http.MethodPost, "/pic/check", picBody(payload, "")))
 			results[i] = result{status: status, err: err}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -819,7 +833,13 @@ func TestStartWebServerListenError(t *testing.T) {
 	defer func() { _ = ln.Close() }()
 	port := ln.Addr().(*net.TCPAddr).Port
 
-	err = StartWebServer(context.Background(), config.Config{Port: port, MaxImageBytes: 1 << 20}, &fakeAnalyzer{}, nil, testLogger())
+	err = StartWebServer(
+		context.Background(),
+		config.Config{Port: port, MaxImageBytes: 1 << 20},
+		&fakeAnalyzer{},
+		nil,
+		testLogger(),
+	)
 	if err == nil {
 		t.Fatal("StartWebServer() = nil, want listen error")
 	}
@@ -1005,7 +1025,12 @@ func TestBodyLimitBoundary(t *testing.T) {
 		t.Fatalf("dial %s: %v", addr, err)
 	}
 	defer func() { _ = conn.Close() }()
-	if _, err := fmt.Fprintf(conn, "POST /pic/check HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n", addr, limit+1); err != nil {
+	if _, err := fmt.Fprintf(
+		conn,
+		"POST /pic/check HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n",
+		addr,
+		limit+1,
+	); err != nil {
 		t.Fatalf("write request: %v", err)
 	}
 	oversized, err := http.ReadResponse(bufio.NewReader(conn), nil)

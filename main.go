@@ -10,7 +10,7 @@ import (
 
 	"nsfw_sherlock/config"
 	"nsfw_sherlock/engine"
-	"nsfw_sherlock/grpcServer"
+	grpcserver "nsfw_sherlock/grpcServer"
 	"nsfw_sherlock/logging"
 	"nsfw_sherlock/textcheck"
 	"nsfw_sherlock/web"
@@ -48,6 +48,8 @@ func serve(cfg config.Config, log *slog.Logger) error {
 	}
 	eng, err := engine.NewEngine(m, engine.Options{
 		Profile:       cfg.Profile,
+		Provider:      cfg.ORTProvider,
+		DeviceID:      cfg.ORTDeviceID,
 		ModelsDir:     cfg.ModelsDir,
 		PoolSize:      cfg.SessionPoolSize,
 		AllowDegraded: cfg.AllowDegraded,
@@ -80,15 +82,31 @@ func serve(cfg config.Config, log *slog.Logger) error {
 			}
 		}
 	} else {
-		log.Warn("OCR disabled; nsfwText will always be false", "ocr_enabled", cfg.OCR, "ocr_available", textcheck.Enabled())
+		log.Warn(
+			"OCR disabled; nsfwText will always be false",
+			"ocr_enabled",
+			cfg.OCR,
+			"ocr_available",
+			textcheck.Enabled(),
+		)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Info("starting server", "app_env", cfg.AppEnv, "port", cfg.Port)
+	log.Info(
+		"starting server",
+		"app_env",
+		cfg.AppEnv,
+		"port",
+		cfg.Port,
+		"ort_provider",
+		cfg.ORTProvider,
+		"ort_device_id",
+		cfg.ORTDeviceID,
+	)
 	if cfg.AppEnv == "grpc" {
-		return grpcServer.StartGrpcServer(ctx, cfg, eng, checker, log)
+		return grpcserver.StartGrpcServer(ctx, cfg, eng, checker, log)
 	}
 	return web.StartWebServer(ctx, cfg, eng, checker, log)
 }

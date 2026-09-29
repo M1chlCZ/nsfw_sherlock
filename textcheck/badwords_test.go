@@ -25,6 +25,7 @@ func TestContainsBadWords(t *testing.T) {
 	}{
 		{name: "exact match", input: "fuck", want: []string{"fuck"}},
 		{name: "case insensitive", input: "FuCk", want: []string{"fuck"}},
+		{name: "OCR whitespace separates words", input: "hello\nfuck\tshit\rworld", want: []string{"fuck", "shit"}},
 		{name: "punctuation stripped", input: "f.u.c.k", want: []string{"fuck"}},
 		{name: "digits stripped", input: "fuck123", want: []string{"fuck"}},
 		{name: "unicode letters dropped", input: "föck", want: nil},
@@ -110,10 +111,8 @@ func TestLoadBadWordsReloadRace(t *testing.T) {
 
 	stop := make(chan struct{})
 	var readers sync.WaitGroup
-	for i := 0; i < 4; i++ {
-		readers.Add(1)
-		go func() {
-			defer readers.Done()
+	for range 4 {
+		readers.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -127,10 +126,10 @@ func TestLoadBadWordsReloadRace(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		path := listA
 		if i%2 == 0 {
 			path = listB
@@ -202,17 +201,15 @@ func TestContainsBadWordsConcurrent(t *testing.T) {
 
 	want := []string{"fuck", "shit"}
 	var wg sync.WaitGroup
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
+	for range goroutines {
+		wg.Go(func() {
+			for range iterations {
 				if got := ContainsBadWords("fuck shit"); !reflect.DeepEqual(got, want) {
 					t.Errorf("ContainsBadWords = %#v, want %#v", got, want)
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

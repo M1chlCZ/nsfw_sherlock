@@ -69,7 +69,12 @@ func newDetector(m Model, pool *modelPool) (*detector, error) {
 		return nil, fmt.Errorf("engine: detector %q: input crop_pct must be 0, got %v", m.ID, m.Input.CropPct)
 	}
 	if m.Input.Interpolation != "" && m.Input.Interpolation != InterpolationBilinear {
-		return nil, fmt.Errorf("engine: detector %q: input interpolation must be empty or %q, got %q", m.ID, InterpolationBilinear, m.Input.Interpolation)
+		return nil, fmt.Errorf(
+			"engine: detector %q: input interpolation must be empty or %q, got %q",
+			m.ID,
+			InterpolationBilinear,
+			m.Input.Interpolation,
+		)
 	}
 	if pool == nil {
 		return nil, fmt.Errorf("engine: detector %q: nil model pool", m.ID)
@@ -147,11 +152,11 @@ func resizeLinearNoAAFrame(src *image.NRGBA, frameW, frameH, dstW, dstH int) *im
 		i := y*src.Stride + x*4
 		return float64(src.Pix[i]), float64(src.Pix[i+1]), float64(src.Pix[i+2])
 	}
-	for y := 0; y < dstH; y++ {
+	for y := range dstH {
 		y0, wy := linearTap((float64(y)+0.5)*scaleY-0.5, frameH)
 		y1 := min(y0+1, frameH-1)
 		row := y * dst.Stride
-		for x := 0; x < dstW; x++ {
+		for x := range dstW {
 			x0, wx := linearTap((float64(x)+0.5)*scaleX-0.5, frameW)
 			x1 := min(x0+1, frameW-1)
 			w00 := (1 - wx) * (1 - wy)
@@ -198,8 +203,8 @@ func preprocessDetector(img image.Image, dstW, dstH int) ([]float32, DetectorGeo
 	out := make([]float32, 3*dstW*dstH)
 	rendered := renderDetectorInput(img, geom)
 	plane := dstW * dstH
-	for y := 0; y < dstH; y++ {
-		for x := 0; x < dstW; x++ {
+	for y := range dstH {
+		for x := range dstW {
 			i := rendered.PixOffset(x, y)
 			j := y*dstW + x
 			out[j] = float32(rendered.Pix[i+2]) / 255
@@ -224,7 +229,13 @@ func renderDetectorInput(img image.Image, geom DetectorGeometry) *image.NRGBA {
 	return resizeLinearNoAAPadded(nrgba, geom.InputW, geom.InputH)
 }
 
-func decodeYOLO(out []float32, shape []int64, spec DetectorSpec, geom DetectorGeometry, srcW, srcH int) ([]Detection, error) {
+func decodeYOLO(
+	out []float32,
+	shape []int64,
+	spec DetectorSpec,
+	geom DetectorGeometry,
+	srcW, srcH int,
+) ([]Detection, error) {
 	rows := 4 + len(spec.Classes)
 	if len(spec.Classes) == 0 {
 		return nil, errors.New("decode: no classes")
@@ -262,7 +273,7 @@ func decodeYOLO(out []float32, shape []int64, spec DetectorSpec, geom DetectorGe
 	}
 
 	dets := []Detection{}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		best, bestScore := 0, at(4, i)
 		for c := 1; c < len(spec.Classes); c++ {
 			if s := at(4+c, i); s > bestScore {
@@ -285,8 +296,8 @@ func decodeYOLO(out []float32, shape []int64, spec DetectorSpec, geom DetectorGe
 		y := cy/geom.Scale - h/2
 		x2 := min(x+w, float32(srcW))
 		y2 := min(y+h, float32(srcH))
-		x1 := clampFloat(x, 0, float32(srcW))
-		y1 := clampFloat(y, 0, float32(srcH))
+		x1 := clampFloat(x, float32(srcW))
+		y1 := clampFloat(y, float32(srcH))
 		if x2 <= x1 || y2 <= y1 {
 			continue
 		}
@@ -339,12 +350,6 @@ func boxIoU(a, b Box) float32 {
 	return inter / union
 }
 
-func clampFloat(v, lo, hi float32) float32 {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
+func clampFloat(v, hi float32) float32 {
+	return min(max(v, 0), hi)
 }

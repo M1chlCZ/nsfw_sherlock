@@ -255,8 +255,8 @@ func TestPreprocessExtremeAspectCrop(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			img := image.NewNRGBA(image.Rect(0, 0, c.srcW, c.srcH))
-			for y := 0; y < c.srcH; y++ {
-				for x := 0; x < c.srcW; x++ {
+			for y := range c.srcH {
+				for x := range c.srcW {
 					i := img.PixOffset(x, y)
 					img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = 0, 0, 0, 0xff
 				}
@@ -404,8 +404,8 @@ func TestPreprocessCenterCropPadding(t *testing.T) {
 	t.Run("review geometry 3x5 source into 4x8 window", func(t *testing.T) {
 		const r, g, b = 200, 100, 50
 		img := image.NewNRGBA(image.Rect(0, 0, 3, 5))
-		for y := 0; y < 5; y++ {
-			for x := 0; x < 3; x++ {
+		for y := range 5 {
+			for x := range 3 {
 				i := img.PixOffset(x, y)
 				img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = r, g, b, 0xff
 			}
@@ -480,7 +480,7 @@ func TestPreprocessInterpolationExact(t *testing.T) {
 			t.Fatalf("Preprocess: %v", err)
 		}
 		firstRow := []float32{0, 64.0 / 255, 191.0 / 255, 1}
-		for c := 0; c < 3; c++ {
+		for c := range 3 {
 			plane := out[c*16 : (c+1)*16]
 			for x := range firstRow {
 				if plane[x] != firstRow[x] {

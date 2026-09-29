@@ -1,4 +1,4 @@
-package grpcServer
+package grpcserver
 
 import (
 	"context"
@@ -31,14 +31,20 @@ var (
 )
 
 // StartGrpcServer serves the NSFW API on :cfg.Port until ctx is cancelled.
-func StartGrpcServer(ctx context.Context, cfg config.Config, analyzer Analyzer, checker TextChecker, log *slog.Logger) error {
+func StartGrpcServer(
+	ctx context.Context,
+	cfg config.Config,
+	analyzer Analyzer,
+	checker TextChecker,
+	log *slog.Logger,
+) error {
 	if log == nil {
 		log = slog.Default()
 	}
 	timeout := gracefulTimeout
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	lis, err := net.Listen("tcp", addr)
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("grpcServer: cannot listen on %s: %w", addr, err)
 	}
@@ -63,7 +69,7 @@ func StartGrpcServer(ctx context.Context, cfg config.Config, analyzer Analyzer, 
 	case <-ctx.Done():
 	}
 
-	log.Info("grpc: shutting down server", "timeout", timeout)
+	log.InfoContext(ctx, "grpc: shutting down server", "timeout", timeout)
 	stopped := make(chan struct{})
 	go func() {
 		server.GracefulStop()
@@ -74,7 +80,7 @@ func StartGrpcServer(ctx context.Context, cfg config.Config, analyzer Analyzer, 
 	select {
 	case <-stopped:
 	case <-stopCtx.Done():
-		log.Warn("grpc: graceful stop timed out, forcing stop")
+		log.WarnContext(ctx, "grpc: graceful stop timed out, forcing stop")
 		go server.Stop()
 		return fmt.Errorf("grpcServer: graceful stop timed out after %s: %w", timeout, stopCtx.Err())
 	}
@@ -118,7 +124,16 @@ func recoveryInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Error("grpc: panic recovered", "method", info.FullMethod, "panic", r, "stack", string(debug.Stack()))
+				log.ErrorContext(
+					ctx,
+					"grpc: panic recovered",
+					"method",
+					info.FullMethod,
+					"panic",
+					r,
+					"stack",
+					string(debug.Stack()),
+				)
 				err = status.Error(codes.Internal, "internal server error")
 			}
 		}()
@@ -142,10 +157,7 @@ func timeoutInterceptor() grpc.UnaryServerInterceptor {
 }
 
 func concurrencyInterceptor() grpc.UnaryServerInterceptor {
-	limit := rpcConcurrency
-	if limit < 1 {
-		limit = 1
-	}
+	limit := max(rpcConcurrency, 1)
 	slots := make(chan struct{}, limit)
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		select {

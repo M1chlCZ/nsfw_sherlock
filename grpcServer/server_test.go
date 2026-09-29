@@ -1,4 +1,4 @@
-package grpcServer
+package grpcserver
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func TestRPCTimeout(t *testing.T) {
 	client := newTestClient(t, analyzer, nil)
 
 	start := time.Now()
-	_, err := client.Detect(context.Background(), &grpcModels.NSFWRequest{Base64: encodePayload(t, testPayload)})
+	_, err := client.Detect(context.Background(), &grpcModels.NSFWRequest{Base64: encodePayload(t)})
 	assertCode(t, err, codes.DeadlineExceeded)
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("RPC took %s, want near the 20ms timeout", elapsed)
@@ -43,7 +43,7 @@ func TestRPCConcurrencyLimiter(t *testing.T) {
 		return engine.Analysis{}, nil
 	}}
 	client := newTestClient(t, analyzer, nil)
-	payload := encodePayload(t, testPayload)
+	payload := encodePayload(t)
 
 	firstErr := make(chan error, 1)
 	go func() {

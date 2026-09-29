@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"nsfw_sherlock/config"
 	"nsfw_sherlock/engine"
 )
 
@@ -45,22 +46,19 @@ func main() {
 }
 
 func run() int {
-	defaultProfile := os.Getenv("NSFW_PROFILE")
-	if defaultProfile == "" {
-		defaultProfile = "balanced"
-	}
-	defaultManifest := os.Getenv("MANIFEST")
-	if defaultManifest == "" {
-		defaultManifest = "models/manifest.json"
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
 	}
 	dir := flag.String("dir", "", "labeled image directory with a <label>/<file> layout")
-	manifest := flag.String("manifest", defaultManifest, "path to the model manifest")
-	profile := flag.String("profile", defaultProfile, "manifest profile to load")
-	models := flag.String("models", "./assets/models", "directory holding the ONNX model files")
-	sessionPool := flag.Int("session-pool", 2, "ONNX sessions to create per model")
+	manifest := flag.String("manifest", cfg.Manifest, "path to the model manifest")
+	profile := flag.String("profile", cfg.Profile, "manifest profile to load")
+	models := flag.String("models", cfg.ModelsDir, "directory holding the ONNX model files")
+	sessionPool := flag.Int("session-pool", cfg.SessionPoolSize, "ONNX sessions to create per model")
 	jsonOut := flag.Bool("json", false, "print only the JSON summary")
 	limit := flag.Int("limit", 0, "maximum images per class, 0 for all")
-	ortLib := flag.String("ort", os.Getenv("ORT_LIB"), "path to the ONNX Runtime shared library")
+	ortLib := flag.String("ort", cfg.ORTLib, "path to the ONNX Runtime shared library")
 	flag.Parse()
 
 	if *dir == "" {
@@ -96,6 +94,8 @@ func run() int {
 		Profile:   *profile,
 		ModelsDir: *models,
 		PoolSize:  *sessionPool,
+		Provider:  cfg.ORTProvider,
+		DeviceID:  cfg.ORTDeviceID,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -139,10 +139,24 @@ func run() int {
 		}
 		return 0
 	}
-	fmt.Printf("summary images=%d positive=%d negative=%d tp=%d fp=%d tn=%d fn=%d precision=%.4f recall=%.4f f1=%.4f accuracy=%.4f p50=%.1fms p95=%.1fms mean=%.1fms skipped=%d\n",
-		result.Images, result.Positive, result.Negative, result.TP, result.FP, result.TN, result.FN,
-		result.Precision, result.Recall, result.F1, result.Accuracy,
-		result.P50Ms, result.P95Ms, result.MeanMs, result.Skipped)
+	fmt.Printf(
+		"summary images=%d positive=%d negative=%d tp=%d fp=%d tn=%d fn=%d precision=%.4f recall=%.4f f1=%.4f accuracy=%.4f p50=%.1fms p95=%.1fms mean=%.1fms skipped=%d\n",
+		result.Images,
+		result.Positive,
+		result.Negative,
+		result.TP,
+		result.FP,
+		result.TN,
+		result.FN,
+		result.Precision,
+		result.Recall,
+		result.F1,
+		result.Accuracy,
+		result.P50Ms,
+		result.P95Ms,
+		result.MeanMs,
+		result.Skipped,
+	)
 	return 0
 }
 
@@ -255,10 +269,7 @@ func percentile(sorted []float64, p float64) float64 {
 	if len(sorted) == 0 {
 		return 0
 	}
-	idx := int(math.Ceil(p*float64(len(sorted)))) - 1
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(int(math.Ceil(p*float64(len(sorted))))-1, 0)
 	if idx >= len(sorted) {
 		idx = len(sorted) - 1
 	}

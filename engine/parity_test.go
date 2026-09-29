@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"nsfw_sherlock/config"
+
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -91,10 +93,14 @@ type parityTolerance struct {
 
 var (
 	parityRuntimeOnce sync.Once
-	parityRuntimeErr  error
+	errParityRuntime  error
 )
 
 func TestParity(t *testing.T) {
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
 	strict := os.Getenv("PARITY_REQUIRE") == "1"
 	manifestPath := os.Getenv("PARITY_MANIFEST")
 	explicitManifest := manifestPath != ""
@@ -126,7 +132,13 @@ func TestParity(t *testing.T) {
 
 			modelPath := filepath.Join(modelsDir, model.File)
 			if info, err := os.Stat(modelPath); err != nil || info.IsDir() {
-				paritySkipOrFail(t, enforce, "model file %s not present in MODELS_DIR=%s; run scripts/fetch-models.sh", model.File, modelsDir)
+				paritySkipOrFailf(
+					t,
+					enforce,
+					"model file %s not present in MODELS_DIR=%s; run scripts/fetch-models.sh",
+					model.File,
+					modelsDir,
+				)
 			}
 
 			fixture, err := readParityFixture(fixturePath)
@@ -155,7 +167,7 @@ func TestParity(t *testing.T) {
 			}
 
 			if err := parityInitRuntime(); err != nil {
-				paritySkipOrFail(t, enforce, "onnxruntime unavailable: %v", err)
+				paritySkipOrFailf(t, enforce, "onnxruntime unavailable: %v", err)
 			}
 
 			img, err := loadParityImage(fixture)
@@ -164,7 +176,12 @@ func TestParity(t *testing.T) {
 			}
 			parityCheckTensorStats(t, model, fixture, img)
 
-			pool, err := newModelPool(modelPath, model.InputNames, model.OutputNames, 1)
+			pool, err := newModelPool(
+				modelPath,
+				model.InputNames,
+				model.OutputNames,
+				Options{PoolSize: 1, Provider: cfg.ORTProvider, DeviceID: cfg.ORTDeviceID},
+			)
 			if err != nil {
 				t.Fatalf("load model %s: %v", model.File, err)
 			}
@@ -175,9 +192,9 @@ func TestParity(t *testing.T) {
 
 			switch model.Kind {
 			case KindClassifier:
-				parityClassifier(t, ctx, model, pool, fixture, img)
+				parityClassifier(ctx, t, model, pool, fixture, img)
 			case KindDetector:
-				parityDetector(t, ctx, model, pool, fixture, img)
+				parityDetector(ctx, t, model, pool, fixture, img)
 			default:
 				t.Fatalf("unsupported model kind %q", model.Kind)
 			}
@@ -185,7 +202,7 @@ func TestParity(t *testing.T) {
 	}
 }
 
-func paritySkipOrFail(t *testing.T, enforce bool, format string, args ...any) {
+func paritySkipOrFailf(t *testing.T, enforce bool, format string, args ...any) {
 	t.Helper()
 	message := fmt.Sprintf(format, args...)
 	if enforce {
@@ -338,7 +355,14 @@ func loadParityImage(fixture parityFixture) (image.Image, error) {
 		}
 		b := img.Bounds()
 		if b.Dx() != spec.Width || b.Dy() != spec.Height {
-			return nil, fmt.Errorf("decoded %s is %dx%d, fixture records %dx%d", spec.Path, b.Dx(), b.Dy(), spec.Width, spec.Height)
+			return nil, fmt.Errorf(
+				"decoded %s is %dx%d, fixture records %dx%d",
+				spec.Path,
+				b.Dx(),
+				b.Dy(),
+				spec.Width,
+				spec.Height,
+			)
 		}
 		return img, nil
 	case "gradient-checkerboard-v1":
@@ -355,9 +379,9 @@ func paritySyntheticImage(width, height int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, width, height))
 	denomX := max(width-1, 1)
 	denomY := max(height-1, 1)
-	for y := 0; y < height; y++ {
+	for y := range height {
 		green := uint8(y * 255 / denomY)
-		for x := 0; x < width; x++ {
+		for x := range width {
 			i := y*img.Stride + x*4
 			img.Pix[i] = uint8(x * 255 / denomX)
 			img.Pix[i+1] = green
@@ -488,9 +512,9 @@ func parityCheckTensorStats(t *testing.T, model Model, fixture parityFixture, im
 
 func parityInitRuntime() error {
 	parityRuntimeOnce.Do(func() {
-		parityRuntimeErr = initParityRuntime()
+		errParityRuntime = initParityRuntime()
 	})
-	return parityRuntimeErr
+	return errParityRuntime
 }
 
 func initParityRuntime() error {
@@ -517,7 +541,14 @@ func initParityRuntime() error {
 	return errors.New("no onnxruntime shared library found; set ORT_LIB or run scripts/fetch-models.sh --ort-only")
 }
 
-func parityClassifier(t *testing.T, ctx context.Context, model Model, pool *modelPool, fixture parityFixture, img image.Image) {
+func parityClassifier(
+	ctx context.Context,
+	t *testing.T,
+	model Model,
+	pool *modelPool,
+	fixture parityFixture,
+	img image.Image,
+) {
 	t.Helper()
 	if model.Output.Activation != fixture.Activation {
 		t.Errorf("manifest activation %q, fixture activation %q", model.Output.Activation, fixture.Activation)
@@ -564,10 +595,23 @@ func parityClassifier(t *testing.T, ctx context.Context, model Model, pool *mode
 	if gotArgmax != wantArgmax {
 		t.Errorf("classifier %s: argmax = %q, fixture argmax = %q", model.ID, gotArgmax, wantArgmax)
 	}
-	t.Logf("classifier %s: max score delta %.6f (tolerance %.3f), argmax %q", model.ID, maxDelta, fixture.Tolerance.Score, gotArgmax)
+	t.Logf(
+		"classifier %s: max score delta %.6f (tolerance %.3f), argmax %q",
+		model.ID,
+		maxDelta,
+		fixture.Tolerance.Score,
+		gotArgmax,
+	)
 }
 
-func parityDetector(t *testing.T, ctx context.Context, model Model, pool *modelPool, fixture parityFixture, img image.Image) {
+func parityDetector(
+	ctx context.Context,
+	t *testing.T,
+	model Model,
+	pool *modelPool,
+	fixture parityFixture,
+	img image.Image,
+) {
 	t.Helper()
 	threshold := float64(model.Detector.ScoreThreshold)
 	if len(fixture.Detections) == 0 {
@@ -600,7 +644,8 @@ func parityDetector(t *testing.T, ctx context.Context, model Model, pool *modelP
 			hDelta := math.Abs(float64(got[i].Box.H) - ref.Box.H)
 			dimDelta := math.Max(wDelta, hDelta)
 			scoreDelta := math.Abs(float64(got[i].Score) - ref.Score)
-			if dist > fixture.Tolerance.BoxPx || dimDelta > fixture.Tolerance.BoxPx || scoreDelta > fixture.Tolerance.Score {
+			if dist > fixture.Tolerance.BoxPx || dimDelta > fixture.Tolerance.BoxPx ||
+				scoreDelta > fixture.Tolerance.Score {
 				continue
 			}
 			if best < 0 || dist < bestDist {
@@ -608,9 +653,20 @@ func parityDetector(t *testing.T, ctx context.Context, model Model, pool *modelP
 			}
 		}
 		if best < 0 {
-			t.Errorf("detector %s: reference %s score %.6f box (%.3f,%.3f,%.3f,%.3f) has no same-label Go detection within center %.3f px, size %.3f px and score %.3f (Go: %s)",
-				model.ID, ref.Label, ref.Score, ref.Box.X, ref.Box.Y, ref.Box.W, ref.Box.H,
-				fixture.Tolerance.BoxPx, fixture.Tolerance.BoxPx, fixture.Tolerance.Score, formatDetections(got))
+			t.Errorf(
+				"detector %s: reference %s score %.6f box (%.3f,%.3f,%.3f,%.3f) has no same-label Go detection within center %.3f px, size %.3f px and score %.3f (Go: %s)",
+				model.ID,
+				ref.Label,
+				ref.Score,
+				ref.Box.X,
+				ref.Box.Y,
+				ref.Box.W,
+				ref.Box.H,
+				fixture.Tolerance.BoxPx,
+				fixture.Tolerance.BoxPx,
+				fixture.Tolerance.Score,
+				formatDetections(got),
+			)
 			continue
 		}
 		matched[best] = true
@@ -630,13 +686,31 @@ func parityDetector(t *testing.T, ctx context.Context, model Model, pool *modelP
 			}
 		}
 		if nearest > fixture.Tolerance.BoxPx {
-			t.Errorf("detector %s: extra Go detection %s score %.6f at (%.1f,%.1f,%.1f,%.1f), nearest reference %.3f px",
-				model.ID, det.Label, det.Score, det.Box.X, det.Box.Y, det.Box.W, det.Box.H, nearest)
+			t.Errorf(
+				"detector %s: extra Go detection %s score %.6f at (%.1f,%.1f,%.1f,%.1f), nearest reference %.3f px",
+				model.ID,
+				det.Label,
+				det.Score,
+				det.Box.X,
+				det.Box.Y,
+				det.Box.W,
+				det.Box.H,
+				nearest,
+			)
 		}
 	}
 
-	t.Logf("detector %s: %d Go detections, %d reference detections, max score delta %.6f (tolerance %.3f), max box-center delta %.3f px, max box-size delta %.3f px (tolerance %.3f)",
-		model.ID, len(got), len(fixture.Detections), maxScoreDelta, fixture.Tolerance.Score, maxBoxDelta, maxDimDelta, fixture.Tolerance.BoxPx)
+	t.Logf(
+		"detector %s: %d Go detections, %d reference detections, max score delta %.6f (tolerance %.3f), max box-center delta %.3f px, max box-size delta %.3f px (tolerance %.3f)",
+		model.ID,
+		len(got),
+		len(fixture.Detections),
+		maxScoreDelta,
+		fixture.Tolerance.Score,
+		maxBoxDelta,
+		maxDimDelta,
+		fixture.Tolerance.BoxPx,
+	)
 }
 
 func argmaxLabel[V ~float32 | ~float64](labels []string, scores map[string]V) string {
@@ -673,7 +747,18 @@ func outputNames(outputs map[string]parityOutput) []string {
 func formatDetections(dets []Detection) string {
 	out := make([]string, 0, len(dets))
 	for _, det := range dets {
-		out = append(out, fmt.Sprintf("%s %.4f (%.1f,%.1f,%.1f,%.1f)", det.Label, det.Score, det.Box.X, det.Box.Y, det.Box.W, det.Box.H))
+		out = append(
+			out,
+			fmt.Sprintf(
+				"%s %.4f (%.1f,%.1f,%.1f,%.1f)",
+				det.Label,
+				det.Score,
+				det.Box.X,
+				det.Box.Y,
+				det.Box.W,
+				det.Box.H,
+			),
+		)
 	}
 	return fmt.Sprint(out)
 }

@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	_ "image/gif"  // Register image decoder.
+	_ "image/jpeg" // Register image decoder.
+	_ "image/png"  // Register image decoder.
 	"io"
 	"math"
 
-	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/bmp" // Register image decoder.
 	"golang.org/x/image/draw"
-	_ "golang.org/x/image/tiff"
-	_ "golang.org/x/image/webp"
+	_ "golang.org/x/image/tiff" // Register image decoder.
+	_ "golang.org/x/image/webp" // Register image decoder.
 )
 
 // MaxInputDimension is the largest width or height accepted by Preprocess.
@@ -113,19 +113,25 @@ func Preprocess(img image.Image, spec InputSpec) ([]float32, error) {
 		return nil, fmt.Errorf("engine: invalid input size %dx%d", spec.Width, spec.Height)
 	}
 	if spec.Width > MaxInputDimension || spec.Height > MaxInputDimension {
-		return nil, fmt.Errorf("engine: input size %dx%d exceeds max dimension %d", spec.Width, spec.Height, MaxInputDimension)
+		return nil, fmt.Errorf(
+			"engine: input size %dx%d exceeds max dimension %d",
+			spec.Width,
+			spec.Height,
+			MaxInputDimension,
+		)
 	}
 	if spec.Resize != "" && spec.Resize != ResizeStretch {
 		return nil, fmt.Errorf("engine: unsupported resize mode %q", spec.Resize)
 	}
-	if math.IsNaN(float64(spec.CropPct)) || spec.CropPct < 0 || spec.CropPct > 1 || (spec.CropPct > 0 && spec.CropPct < MinCropPct) {
+	if math.IsNaN(float64(spec.CropPct)) || spec.CropPct < 0 || spec.CropPct > 1 ||
+		(spec.CropPct > 0 && spec.CropPct < MinCropPct) {
 		return nil, fmt.Errorf("engine: invalid crop_pct %v: must be 0 or in [%v, 1]", spec.CropPct, MinCropPct)
 	}
 	if err := validateInterpolation(spec.Interpolation); err != nil {
 		return nil, fmt.Errorf("engine: %w", err)
 	}
 	if spec.Normalize {
-		for c := 0; c < 3; c++ {
+		for c := range 3 {
 			mean, std := spec.Mean[c], spec.Std[c]
 			if math.IsNaN(float64(mean)) || math.IsInf(float64(mean), 0) ||
 				math.IsNaN(float64(std)) || math.IsInf(float64(std), 0) || std == 0 {
@@ -143,11 +149,11 @@ func Preprocess(img image.Image, spec InputSpec) ([]float32, error) {
 	w, h := spec.Width, spec.Height
 
 	out := make([]float32, 3*h*w)
-	for y := 0; y < h; y++ {
+	for y := range h {
 		row := y * src.Stride
-		for x := 0; x < w; x++ {
+		for x := range w {
 			i := row + x*4
-			for c := 0; c < 3; c++ {
+			for c := range 3 {
 				v := float32(src.Pix[i+c]) / 255
 				if spec.Normalize {
 					v = (v - spec.Mean[c]) / spec.Std[c]
@@ -230,7 +236,12 @@ func prepareSourceCrop(img image.Image, w, h int, cropPct float32, interpolation
 	return dst
 }
 
-func prepareSourceCropROI(img image.Image, w, h int, interpolation string, resizeW, resizeH, cropX, cropY int) *image.NRGBA {
+func prepareSourceCropROI(
+	img image.Image,
+	w, h int,
+	interpolation string,
+	resizeW, resizeH, cropX, cropY int,
+) *image.NRGBA {
 	roi := sourceCropROI(img.Bounds(), resizeW, resizeH, cropX, cropY, w, h)
 	if roi.Empty() {
 		return prepareSource(img, w, h, interpolation)
@@ -292,7 +303,7 @@ func flattenOpaque(img image.Image) *image.NRGBA {
 	dst := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 	if nrgba, ok := img.(*image.NRGBA); ok {
 		rowLen := b.Dx() * 4
-		for y := 0; y < b.Dy(); y++ {
+		for y := range b.Dy() {
 			srcOff := nrgba.PixOffset(b.Min.X, b.Min.Y+y)
 			dstOff := y * dst.Stride
 			copy(dst.Pix[dstOff:dstOff+rowLen], nrgba.Pix[srcOff:srcOff+rowLen])
@@ -302,9 +313,10 @@ func flattenOpaque(img image.Image) *image.NRGBA {
 		}
 		return dst
 	}
-	for y := 0; y < b.Dy(); y++ {
-		for x := 0; x < b.Dx(); x++ {
-			c := color.NRGBAModel.Convert(img.At(b.Min.X+x, b.Min.Y+y)).(color.NRGBA)
+	for y := range b.Dy() {
+		for x := range b.Dx() {
+			// NRGBAModel.Convert always returns color.NRGBA.
+			c := color.NRGBAModel.Convert(img.At(b.Min.X+x, b.Min.Y+y)).(color.NRGBA) //nolint:errcheck // Guaranteed by the color model.
 			i := y*dst.Stride + x*4
 			dst.Pix[i+0] = c.R
 			dst.Pix[i+1] = c.G

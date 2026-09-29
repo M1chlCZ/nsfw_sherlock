@@ -9,10 +9,33 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: docker-publish
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    name: Validate release
+    uses: ./.github/workflows/ci.yml
+
   publish:
-    name: Publish multi-arch image
+    name: Publish ${{ matrix.variant }} image
+    needs: validate
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: cpu
+            suffix: ""
+            platforms: linux/amd64,linux/arm64
+            runtime-image: debian:bookworm-slim
+            provider: cpu
+          - variant: cuda12
+            suffix: -cuda
+            platforms: linux/amd64
+            runtime-image: nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04
+            provider: cuda
     steps:
       - uses: actions/checkout@v4
 
@@ -41,21 +64,24 @@ jobs:
             m1chl/nsfw-sherlock
             ghcr.io/${{ github.repository_owner }}/nsfw_sherlock
           tags: |
-            type=raw,value=${{ github.ref_name }}
-            type=raw,value=latest
+            type=raw,value=${{ github.ref_name }}${{ matrix.suffix }}
+            type=raw,value=latest${{ matrix.suffix }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platforms }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             MODELS_BASE_URL=https://github.com/${{ github.repository }}/releases/download/models-v1
+            RUNTIME_IMAGE=${{ matrix.runtime-image }}
+            ORT_VARIANT=${{ matrix.variant }}
+            ORT_PROVIDER=${{ matrix.provider }}
           provenance: true
           sbom: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}

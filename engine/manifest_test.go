@@ -174,14 +174,19 @@ func TestManifestModelLookup(t *testing.T) {
 	if b.Input.Width != 640 || b.Input.Height != 640 || b.Input.Normalize || b.Input.Resize != "" {
 		t.Errorf("Model(b).Input = %+v, want 640x640 unnormalized empty resize", b.Input)
 	}
-	if len(b.InputNames) != 1 || b.InputNames[0] != "images" || len(b.OutputNames) != 1 || b.OutputNames[0] != "output0" {
+	if len(b.InputNames) != 1 || b.InputNames[0] != "images" || len(b.OutputNames) != 1 ||
+		b.OutputNames[0] != "output0" {
 		t.Errorf("Model(b) names = %v/%v, want [images]/[output0]", b.InputNames, b.OutputNames)
 	}
 	if len(b.Detector.Classes) != 2 || len(b.Detector.ExplicitClasses) != 1 || len(b.Detector.SuggestiveClasses) != 1 {
 		t.Errorf("Model(b).Detector = %+v, want 2 classes, 1 explicit, 1 suggestive", b.Detector)
 	}
 	if b.Detector.ScoreThreshold != 0.35 || b.Detector.IoUThreshold != 0.5 {
-		t.Errorf("Model(b).Detector thresholds = %v/%v, want 0.35/0.5", b.Detector.ScoreThreshold, b.Detector.IoUThreshold)
+		t.Errorf(
+			"Model(b).Detector thresholds = %v/%v, want 0.35/0.5",
+			b.Detector.ScoreThreshold,
+			b.Detector.IoUThreshold,
+		)
 	}
 
 	if _, err := m.Model("missing"); err == nil {
@@ -191,7 +196,7 @@ func TestManifestModelLookup(t *testing.T) {
 
 func TestManifestValidation(t *testing.T) {
 	validSHA := strings.Repeat("0", 64)
-	replace := func(s, old, new string) string { return strings.Replace(s, old, new, 1) }
+	replace := func(s, old, replacement string) string { return strings.Replace(s, old, replacement, 1) }
 	manifestDoc := func(profiles, models string) string {
 		return fmt.Sprintf(`{"version": 1, "profiles": %s, "models": [%s]}`, profiles, models)
 	}
@@ -226,8 +231,11 @@ func TestManifestValidation(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "unsupported version",
-			doc:     fmt.Sprintf(`{"version": 2, "profiles": {"balanced": {"models": ["a"]}}, "models": [%s]}`, validClassifier),
+			name: "unsupported version",
+			doc: fmt.Sprintf(
+				`{"version": 2, "profiles": {"balanced": {"models": ["a"]}}, "models": [%s]}`,
+				validClassifier,
+			),
 			wantErr: "unsupported version",
 		},
 		{
@@ -345,13 +353,17 @@ func TestManifestValidation(t *testing.T) {
 			wantErr: "input_names: empty entry",
 		},
 		{
-			name:    "classifier duplicate input names",
-			doc:     classifierDoc(replace(validClassifier, `"input_names": ["input"]`, `"input_names": ["input", "input"]`)),
+			name: "classifier duplicate input names",
+			doc: classifierDoc(
+				replace(validClassifier, `"input_names": ["input"]`, `"input_names": ["input", "input"]`),
+			),
 			wantErr: `input_names: duplicate entry "input"`,
 		},
 		{
-			name:    "classifier too many input names",
-			doc:     classifierDoc(replace(validClassifier, `"input_names": ["input"]`, `"input_names": ["input", "input2"]`)),
+			name: "classifier too many input names",
+			doc: classifierDoc(
+				replace(validClassifier, `"input_names": ["input"]`, `"input_names": ["input", "input2"]`),
+			),
 			wantErr: "input_names: must have exactly one entry",
 		},
 		{
@@ -365,18 +377,24 @@ func TestManifestValidation(t *testing.T) {
 			wantErr: "output_names: empty entry",
 		},
 		{
-			name:    "classifier duplicate output names",
-			doc:     classifierDoc(replace(validClassifier, `"output_names": ["logits"]`, `"output_names": ["logits", "logits"]`)),
+			name: "classifier duplicate output names",
+			doc: classifierDoc(
+				replace(validClassifier, `"output_names": ["logits"]`, `"output_names": ["logits", "logits"]`),
+			),
 			wantErr: `output_names: duplicate entry "logits"`,
 		},
 		{
-			name:    "classifier too many output names",
-			doc:     classifierDoc(replace(validClassifier, `"output_names": ["logits"]`, `"output_names": ["logits", "logits2"]`)),
+			name: "classifier too many output names",
+			doc: classifierDoc(
+				replace(validClassifier, `"output_names": ["logits"]`, `"output_names": ["logits", "logits2"]`),
+			),
 			wantErr: "output_names: must have exactly one entry",
 		},
 		{
-			name:    "detector too many output names",
-			doc:     detectorDoc(replace(validDetector, `"output_names": ["output0"]`, `"output_names": ["output0", "output1"]`)),
+			name: "detector too many output names",
+			doc: detectorDoc(
+				replace(validDetector, `"output_names": ["output0"]`, `"output_names": ["output0", "output1"]`),
+			),
 			wantErr: "output_names: must have exactly one entry",
 		},
 		{
@@ -390,8 +408,14 @@ func TestManifestValidation(t *testing.T) {
 			wantErr: "output_names: no entries",
 		},
 		{
-			name:    "detector missing spec",
-			doc:     detectorDoc(replace(validDetector, `"detector": {"classes": ["X"], "score_threshold": 0.3, "iou_threshold": 0.5, "explicit_classes": ["X"], "suggestive_classes": []},`, "")),
+			name: "detector missing spec",
+			doc: detectorDoc(
+				replace(
+					validDetector,
+					`"detector": {"classes": ["X"], "score_threshold": 0.3, "iou_threshold": 0.5, "explicit_classes": ["X"], "suggestive_classes": []},`,
+					"",
+				),
+			),
 			wantErr: "missing detector block",
 		},
 		{
@@ -502,13 +526,17 @@ func TestManifestValidation(t *testing.T) {
 			wantErr: "invalid input size",
 		},
 		{
-			name:    "input width over max dimension",
-			doc:     classifierDoc(replace(validClassifier, `"width": 224`, fmt.Sprintf(`"width": %d`, MaxInputDimension+1))),
+			name: "input width over max dimension",
+			doc: classifierDoc(
+				replace(validClassifier, `"width": 224`, fmt.Sprintf(`"width": %d`, MaxInputDimension+1)),
+			),
 			wantErr: "invalid input size",
 		},
 		{
-			name:    "input height over max dimension",
-			doc:     classifierDoc(replace(validClassifier, `"height": 224`, fmt.Sprintf(`"height": %d`, MaxInputDimension+1))),
+			name: "input height over max dimension",
+			doc: classifierDoc(
+				replace(validClassifier, `"height": 224`, fmt.Sprintf(`"height": %d`, MaxInputDimension+1)),
+			),
 			wantErr: "invalid input size",
 		},
 		{
@@ -534,8 +562,10 @@ func TestManifestValidation(t *testing.T) {
 			wantErr: "absolute https url",
 		},
 		{
-			name:    "hf source not https",
-			doc:     classifierDoc(replace(validClassifier, `"url": "https://example.com/a.onnx"`, `"url": "http://example.com/a.onnx"`)),
+			name: "hf source not https",
+			doc: classifierDoc(
+				replace(validClassifier, `"url": "https://example.com/a.onnx"`, `"url": "http://example.com/a.onnx"`),
+			),
 			wantErr: "absolute https url",
 		},
 		{
@@ -549,8 +579,11 @@ func TestManifestValidation(t *testing.T) {
 			wantErr: "invalid url",
 		},
 		{
-			name:    "unknown json field",
-			doc:     fmt.Sprintf(`{"version": 1, "profiles": {"balanced": {"models": ["a"]}}, "models": [%s], "extra": true}`, validClassifier),
+			name: "unknown json field",
+			doc: fmt.Sprintf(
+				`{"version": 1, "profiles": {"balanced": {"models": ["a"]}}, "models": [%s], "extra": true}`,
+				validClassifier,
+			),
 			wantErr: "unknown field",
 		},
 		{
@@ -648,10 +681,22 @@ func TestManifestValidation(t *testing.T) {
 			mutate  func(*DetectorSpec)
 			wantErr string
 		}{
-			{"nan score threshold", func(d *DetectorSpec) { d.ScoreThreshold = float32(math.NaN()) }, "score_threshold"},
-			{"positive inf score threshold", func(d *DetectorSpec) { d.ScoreThreshold = float32(math.Inf(1)) }, "score_threshold"},
+			{
+				"nan score threshold",
+				func(d *DetectorSpec) { d.ScoreThreshold = float32(math.NaN()) },
+				"score_threshold",
+			},
+			{
+				"positive inf score threshold",
+				func(d *DetectorSpec) { d.ScoreThreshold = float32(math.Inf(1)) },
+				"score_threshold",
+			},
 			{"nan iou threshold", func(d *DetectorSpec) { d.IoUThreshold = float32(math.NaN()) }, "iou_threshold"},
-			{"negative inf iou threshold", func(d *DetectorSpec) { d.IoUThreshold = float32(math.Inf(-1)) }, "iou_threshold"},
+			{
+				"negative inf iou threshold",
+				func(d *DetectorSpec) { d.IoUThreshold = float32(math.Inf(-1)) },
+				"iou_threshold",
+			},
 		}
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
@@ -777,12 +822,18 @@ func TestManifestInterpolation(t *testing.T) {
 
 	for _, interpolation := range []string{"nearest", "BILINEAR", "bicubic "} {
 		t.Run("invalid "+interpolation, func(t *testing.T) {
-			_, err := LoadManifest(writeTempFile(t, "manifest.json", doc(model(`, "interpolation": `+fmt.Sprintf("%q", interpolation)))))
+			_, err := LoadManifest(
+				writeTempFile(t, "manifest.json", doc(model(`, "interpolation": `+fmt.Sprintf("%q", interpolation)))),
+			)
 			if err == nil {
 				t.Fatalf("LoadManifest(interpolation %q) error = nil, want error", interpolation)
 			}
 			if !strings.Contains(err.Error(), "interpolation") {
-				t.Errorf("LoadManifest(interpolation %q) error = %v, want error mentioning interpolation", interpolation, err)
+				t.Errorf(
+					"LoadManifest(interpolation %q) error = %v, want error mentioning interpolation",
+					interpolation,
+					err,
+				)
 			}
 		})
 	}

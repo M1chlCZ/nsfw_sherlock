@@ -35,15 +35,15 @@ func stripDataURLPrefix(s string) string {
 	if !hasASCIIPrefixFold(s, "data:") {
 		return s
 	}
-	comma := strings.IndexByte(s, ',')
-	if comma < 0 {
+	before, after, ok := strings.Cut(s, ",")
+	if !ok {
 		return s
 	}
-	header := s[:comma]
+	header := before
 	if len(header) < len(base64Marker) || !strings.EqualFold(header[len(header)-len(base64Marker):], base64Marker) {
 		return s
 	}
-	return s[comma+1:]
+	return after
 }
 
 func asciiLower(s string) string {

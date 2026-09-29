@@ -12,6 +12,7 @@ func getenvFrom(env map[string]string) func(string) string {
 func wantDefaults() Config {
 	return Config{
 		AppEnv:          "web",
+		ORTProvider:     "cpu",
 		Port:            4000,
 		ModelsDir:       "./assets/models",
 		Manifest:        "models/manifest.json",
@@ -253,4 +254,33 @@ func TestLoadWhitespace(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestLoadInvalidGPUConfig(t *testing.T) {
+	for _, env := range []map[string]string{
+		{"ORT_PROVIDER": "unknown"},
+		{"ORT_DEVICE_ID": "-1"},
+		{"ORT_DEVICE_ID": "2147483648"},
+		{"ORT_DEVICE_ID": "invalid"},
+	} {
+		if _, err := Load(getenvFrom(env)); err == nil {
+			t.Errorf("Load(%v) accepted invalid GPU configuration", env)
+		}
+	}
+}
+
+func TestLoadGPUConfig(t *testing.T) {
+	for _, provider := range []string{"cpu", "cuda", "migraphx", "rocm"} {
+		cfg, err := Load(getenvFrom(map[string]string{"ORT_PROVIDER": provider, "ORT_DEVICE_ID": "2"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := provider
+		if want == "rocm" {
+			want = "migraphx"
+		}
+		if cfg.ORTProvider != want || cfg.ORTDeviceID != 2 {
+			t.Fatalf("Load(%s) = %+v", provider, cfg)
+		}
+	}
 }

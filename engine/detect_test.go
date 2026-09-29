@@ -28,8 +28,8 @@ func classNames(n int) []string {
 func fakeYOLOOutput(classes, n int, channelMajor bool, at func(candidate, row int) float32) []float32 {
 	rows := 4 + classes
 	out := make([]float32, rows*n)
-	for i := 0; i < n; i++ {
-		for r := 0; r < rows; r++ {
+	for i := range n {
+		for r := range rows {
 			idx := r*n + i
 			if !channelMajor {
 				idx = i*rows + r
@@ -163,12 +163,20 @@ func TestResizeLinearNoAA(t *testing.T) {
 			if got.Bounds().Dx() != tc.dstW || got.Bounds().Dy() != tc.dstH {
 				t.Fatalf("size = %v, want %dx%d", got.Bounds(), tc.dstW, tc.dstH)
 			}
-			for y := 0; y < tc.dstH; y++ {
-				for x := 0; x < tc.dstW; x++ {
+			for y := range tc.dstH {
+				for x := range tc.dstW {
 					i := got.PixOffset(x, y)
 					want := tc.want[y*tc.dstW+x]
 					if got.Pix[i] != want || got.Pix[i+1] != want || got.Pix[i+2] != want {
-						t.Errorf("pixel (%d,%d) = (%d,%d,%d), want %d", x, y, got.Pix[i], got.Pix[i+1], got.Pix[i+2], want)
+						t.Errorf(
+							"pixel (%d,%d) = (%d,%d,%d), want %d",
+							x,
+							y,
+							got.Pix[i],
+							got.Pix[i+1],
+							got.Pix[i+2],
+							want,
+						)
 					}
 				}
 			}
@@ -179,7 +187,7 @@ func TestResizeLinearNoAA(t *testing.T) {
 func TestResizeLinearNoAAEdgeSampling(t *testing.T) {
 	src := grayNRGBA(4, 1, 0, 85, 170, 255)
 	got := resizeLinearNoAA(src, 2, 2)
-	for y := 0; y < 2; y++ {
+	for y := range 2 {
 		i := got.PixOffset(0, y)
 		j := got.PixOffset(1, y)
 		if got.Pix[i] != 43 || got.Pix[j] != 213 {
@@ -379,7 +387,13 @@ func TestDetectorBoxClippedToSource(t *testing.T) {
 func TestPreprocessDetector(t *testing.T) {
 	t.Run("scales to the top-left and pads with black", func(t *testing.T) {
 		img := image.NewRGBA(image.Rect(0, 0, 640, 480))
-		draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{R: 100, G: 150, B: 200, A: 255}), image.Point{}, draw.Src)
+		draw.Draw(
+			img,
+			img.Bounds(),
+			image.NewUniform(color.RGBA{R: 100, G: 150, B: 200, A: 255}),
+			image.Point{},
+			draw.Src,
+		)
 
 		out, geom := preprocessDetector(img, 320, 320)
 
@@ -435,8 +449,8 @@ func TestPreprocessDetector(t *testing.T) {
 
 	t.Run("non-opaque source is flattened", func(t *testing.T) {
 		img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
-		for y := 0; y < 4; y++ {
-			for x := 0; x < 4; x++ {
+		for y := range 4 {
+			for x := range 4 {
 				img.SetNRGBA(x, y, color.NRGBA{R: 0, G: 255, B: 0, A: 0})
 			}
 		}
@@ -482,7 +496,13 @@ func TestDecodeYOLORejectsBadShapes(t *testing.T) {
 		{"zero candidates", data, []int64{1, 7, 0}, spec3, geom},
 		{"too little data for candidates", data, []int64{1, 7, 2}, spec3, geom},
 		{"huge candidate count", data, []int64{1, 7, math.MaxInt64}, spec3, geom},
-		{"no classes", make([]float32, 8), []int64{1, 4, 2}, DetectorSpec{ScoreThreshold: 0.5, IoUThreshold: 0.45}, geom},
+		{
+			"no classes",
+			make([]float32, 8),
+			[]int64{1, 4, 2},
+			DetectorSpec{ScoreThreshold: 0.5, IoUThreshold: 0.45},
+			geom,
+		},
 		{"invalid geometry", data, []int64{1, 7, 1}, spec3, DetectorGeometry{}},
 	}
 	for _, tc := range cases {
@@ -629,7 +649,11 @@ func TestNewDetectorInputConfig(t *testing.T) {
 		{"non-zero std", func(m *Model) { m.Input.Std = [3]float32{0, 1, 0} }, "std must be zero"},
 		{"unsupported resize", func(m *Model) { m.Input.Resize = "letterbox" }, "unsupported resize mode"},
 		{"non-zero crop_pct", func(m *Model) { m.Input.CropPct = 1.0 }, "crop_pct must be 0"},
-		{"classifier interpolation", func(m *Model) { m.Input.Interpolation = InterpolationBicubic }, "interpolation must be empty or"},
+		{
+			"classifier interpolation",
+			func(m *Model) { m.Input.Interpolation = InterpolationBicubic },
+			"interpolation must be empty or",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -659,13 +683,13 @@ func TestBoxIoU(t *testing.T) {
 }
 
 func TestClampFloat(t *testing.T) {
-	if got := clampFloat(-1, 0, 10); got != 0 {
+	if got := clampFloat(-1, 10); got != 0 {
 		t.Errorf("clampFloat(-1) = %v, want 0", got)
 	}
-	if got := clampFloat(11, 0, 10); got != 10 {
+	if got := clampFloat(11, 10); got != 10 {
 		t.Errorf("clampFloat(11) = %v, want 10", got)
 	}
-	if got := clampFloat(5, 0, 10); got != 5 {
+	if got := clampFloat(5, 10); got != 5 {
 		t.Errorf("clampFloat(5) = %v, want 5", got)
 	}
 }

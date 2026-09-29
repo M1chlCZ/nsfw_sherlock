@@ -1,0 +1,271 @@
+# MIT license; Copyright (c) 2021-2025 Marat Reimers
+# Based on https://github.com/maratori/golangci-lint-config (v2.14.0).
+# Adaptations: numerical constants and process-wide ORT state are intentional;
+# tests share mutable state and exercise private helpers, so stay sequential/in-package.
+# Named geometry/recovery returns and scoped err shadowing are intentional.
+# Complexity limits are 40 branches / 60 statements; the benchmark CLI prints results.
+version: '2'
+issues:
+  max-same-issues: 50
+formatters:
+  enable:
+  - goimports
+  - golines
+  settings:
+    goimports:
+      local-prefixes:
+      - nsfw_sherlock
+    golines:
+      max-len: 120
+linters:
+  enable:
+  - asasalint
+  - asciicheck
+  - bidichk
+  - bodyclose
+  - canonicalheader
+  - clickhouselint
+  - copyloopvar
+  - cyclop
+  - depguard
+  - dupl
+  - durationcheck
+  - embeddedstructfieldcheck
+  - errcheck
+  - errname
+  - errorlint
+  - exhaustive
+  - exptostd
+  - fatcontext
+  - forbidigo
+  - funcorder
+  - funlen
+  - gocheckcompilerdirectives
+  - gochecknoinits
+  - gochecksumtype
+  - goconst
+  - gocritic
+  - gocyclo
+  - godoclint
+  - godot
+  - gomoddirectives
+  - goprintffuncname
+  - gosec
+  - govet
+  - iface
+  - ineffassign
+  - intrange
+  - iotamixing
+  - loggercheck
+  - makezero
+  - mirror
+  - modernize
+  - musttag
+  - nakedret
+  - nestif
+  - nilerr
+  - nilnesserr
+  - nilnil
+  - noctx
+  - nolintlint
+  - nosprintfhostport
+  - perfsprint
+  - predeclared
+  - promlinter
+  - protogetter
+  - reassign
+  - recvcheck
+  - revive
+  - rowserrcheck
+  - sloglint
+  - spancheck
+  - sqlclosecheck
+  - staticcheck
+  - testableexamples
+  - testifylint
+  - tparallel
+  - unconvert
+  - unparam
+  - unqueryvet
+  - unused
+  - usestdlibvars
+  - usetesting
+  - wastedassign
+  - whitespace
+  settings:
+    cyclop:
+      max-complexity: 40
+      package-average: 10.0
+    depguard:
+      rules:
+        deprecated:
+          files:
+          - "$all"
+          deny:
+          - pkg: github.com/golang/protobuf
+            desc: Use google.golang.org/protobuf instead, see https://developers.google.com/protocol-buffers/docs/reference/go/faq#modules
+          - pkg: github.com/satori/go.uuid
+            desc: Use github.com/google/uuid instead, satori's package is not maintained
+          - pkg: github.com/gofrs/uuid$
+            desc: Use github.com/gofrs/uuid/v5 or later, it was not a go module before
+              v5
+        non-test files:
+          files:
+          - "!$test"
+          deny:
+          - pkg: math/rand$
+            desc: Use math/rand/v2 instead, see https://go.dev/blog/randv2
+        non-main files:
+          files:
+          - "!**/main.go"
+          deny:
+          - pkg: log$
+            desc: Use log/slog instead, see https://go.dev/blog/slog
+    embeddedstructfieldcheck:
+      forbid-mutex: true
+    errcheck:
+      check-type-assertions: true
+    exhaustive:
+      check:
+      - switch
+      - map
+    exhaustruct_v5:
+      ignore-patterns:
+      - "^net/http.Client$"
+      - "^net/http.Cookie$"
+      - "^net/http.Request$"
+      - "^net/http.Response$"
+      - "^net/http.Server$"
+      - "^net/http.Transport$"
+      - "^net/url.URL$"
+      - "^os/exec.Cmd$"
+      - "^reflect.StructField$"
+      - "^github.com/Shopify/sarama.Config$"
+      - "^github.com/Shopify/sarama.ProducerMessage$"
+      - "^github.com/mitchellh/mapstructure.DecoderConfig$"
+      - "^github.com/prometheus/client_golang/.+Opts$"
+      - "^github.com/spf13/cobra.Command$"
+      - "^github.com/spf13/cobra.CompletionOptions$"
+      - "^github.com/stretchr/testify/mock.Mock$"
+      - "^github.com/testcontainers/testcontainers-go.+Request$"
+      - "^github.com/testcontainers/testcontainers-go.FromDockerfile$"
+      - "^golang.org/x/tools/go/analysis.Analyzer$"
+      - "^google.golang.org/protobuf/.+Options$"
+      - "^gopkg.in/yaml.v3.Node$"
+      allow-empty-returns: true
+      allow-empty-blank-assignments: true
+    funcorder:
+      struct-method: false
+    funlen:
+      lines: 100
+      statements: 60
+    gochecksumtype:
+      default-signifies-exhaustive: false
+    gocognit:
+      min-complexity: 20
+    gocritic:
+      settings:
+        captLocal:
+          paramsOnly: false
+        underef:
+          skipRecvDeref: false
+    godoclint:
+      enable:
+      - no-unused-link
+      - require-stdlib-doclink
+    govet:
+      enable-all: true
+      disable:
+      - fieldalignment
+      - shadow
+    inamedparam:
+      skip-single-param: true
+    mnd:
+      ignored-functions:
+      - args.Error
+      - flag.Arg
+      - flag.Duration.*
+      - flag.Float.*
+      - flag.Int.*
+      - flag.Uint.*
+      - os.Chmod
+      - os.Mkdir.*
+      - os.OpenFile
+      - os.WriteFile
+      - prometheus.ExponentialBuckets.*
+      - prometheus.LinearBuckets
+    nakedret:
+      max-func-lines: 0
+    nolintlint:
+      allow-no-explanation:
+      - funlen
+      - gocognit
+      - golines
+      require-explanation: true
+      require-specific: true
+    perfsprint:
+      strconcat: false
+      error-format: false
+    reassign:
+      patterns:
+      - ".*"
+    rowserrcheck:
+      packages:
+      - github.com/jmoiron/sqlx
+    sloglint:
+      no-global: all
+      context: scope
+    staticcheck:
+      checks:
+      - all
+      - "-ST1000"
+      - "-ST1016"
+      - "-QF1008"
+    usetesting:
+      os-temp-dir: true
+    gocyclo:
+      min-complexity: 40
+  exclusions:
+    presets:
+    - std-error-handling
+    - common-false-positives
+    rules:
+    - source: TODO
+      linters:
+      - godot
+    - text: should have a package comment
+      linters:
+      - revive
+    - text: exported \S+ \S+ should have comment( \(or a comment on this block\))?
+        or be unexported
+      linters:
+      - revive
+    - text: package comment should be of the form ".+"
+      source: "// ?(nolint|TODO)"
+      linters:
+      - revive
+    - text: comment on exported \S+ \S+ should be of the form ".+"
+      source: "// ?(nolint|TODO)"
+      linters:
+      - revive
+      - staticcheck
+    - path: _test\.go
+      linters:
+      - bodyclose
+      - dupl
+      - errcheck
+      - funlen
+      - goconst
+      - gosec
+      - noctx
+      - wrapcheck
+    - path: cmd/bench/main.go
+      linters:
+      - forbidigo
+      - funlen
+    - path: _test\.go
+      linters:
+      - revive
+      text: unused-parameter
+run:
+  timeout: 5m

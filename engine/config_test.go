@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"io"
 	"log/slog"
 	"testing"
 )
@@ -64,7 +63,7 @@ func TestOptionsInvalidValuesFallBackToDefaults(t *testing.T) {
 
 func TestOptionsOverrides(t *testing.T) {
 	no := false
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	limits := Limits{MaxBytes: 1 << 10, MaxPixels: 4096}
 
 	opts := Options{

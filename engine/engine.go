@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -88,7 +89,10 @@ func NewEngine(m *Manifest, opts Options) (*Engine, error) {
 				}
 				return nil, err
 			}
-			warnings = append(warnings, pendingWarning{model: id, message: fmt.Sprintf("engine: model %q: %v", id, err)})
+			warnings = append(
+				warnings,
+				pendingWarning{model: id, message: fmt.Sprintf("engine: model %q: %v", id, err)},
+			)
 			continue
 		}
 		entries = append(entries, entry)
@@ -117,11 +121,7 @@ func NewEngine(m *Manifest, opts Options) (*Engine, error) {
 		return nil, noModels
 	}
 
-	e, err := newEngineFromEntries(entries, opts.Profile, opts)
-	if err != nil {
-		_ = closeCreated()
-		return nil, err
-	}
+	e := newEngineFromEntries(entries, opts.Profile, opts)
 	e.closers = closers
 	for _, warning := range warnings {
 		e.addWarning(warning.model, warning.message)
@@ -129,14 +129,14 @@ func NewEngine(m *Manifest, opts Options) (*Engine, error) {
 	return e, nil
 }
 
-func newEngineFromEntries(entries []modelEntry, profile string, opts Options) (*Engine, error) {
+func newEngineFromEntries(entries []modelEntry, profile string, opts Options) *Engine {
 	return &Engine{
 		entries:      entries,
 		profile:      profile,
 		opts:         opts.withDefaults(),
 		rules:        deriveRules(entries),
 		warnedModels: make(map[string]struct{}),
-	}, nil
+	}
 }
 
 func buildEntry(model Model, opts Options) (modelEntry, func() error, error) {
@@ -146,7 +146,7 @@ func buildEntry(model Model, opts Options) (modelEntry, func() error, error) {
 			return modelEntry{}, nil, err
 		}
 	}
-	pool, err := newModelPool(path, model.InputNames, model.OutputNames, opts.PoolSize)
+	pool, err := newModelPool(path, model.InputNames, model.OutputNames, opts)
 	if err != nil {
 		return modelEntry{}, nil, err
 	}
@@ -223,12 +223,11 @@ func (e *Engine) Analyze(ctx context.Context, data []byte) (Analysis, error) {
 	results := make([]runResult, len(e.entries))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, entry := range e.entries {
-		i, entry := i, entry
 		g.Go(func() error {
 			if entry.classifier != nil {
 				scores, err := entry.classifier.run(gctx, img)
 				if err != nil {
-					return e.runError(ctx, entry, err, gctx)
+					return e.runError(ctx, gctx, entry, err)
 				}
 				results[i].scores = scores
 				results[i].ok = true
@@ -237,7 +236,7 @@ func (e *Engine) Analyze(ctx context.Context, data []byte) (Analysis, error) {
 			if entry.detector != nil {
 				found, err := entry.detector.run(gctx, img)
 				if err != nil {
-					return e.runError(ctx, entry, err, gctx)
+					return e.runError(ctx, gctx, entry, err)
 				}
 				results[i].dets = found
 				results[i].ok = true
@@ -253,8 +252,7 @@ func (e *Engine) Analyze(ctx context.Context, data []byte) (Analysis, error) {
 	}
 
 	var outputs []ModelOutput
-	for i := len(e.entries) - 1; i >= 0; i-- {
-		entry := e.entries[i]
+	for i, entry := range slices.Backward(e.entries) {
 		if entry.classifier == nil || !results[i].ok {
 			continue
 		}
@@ -286,7 +284,7 @@ func (e *Engine) Analyze(ctx context.Context, data []byte) (Analysis, error) {
 	return analysis, nil
 }
 
-func (e *Engine) runError(parent context.Context, entry modelEntry, err error, gctx context.Context) error {
+func (e *Engine) runError(parent, gctx context.Context, entry modelEntry, err error) error {
 	if entry.model.Required || parent.Err() != nil {
 		return fmt.Errorf("engine: model %q: %w", entry.model.ID, err)
 	}
