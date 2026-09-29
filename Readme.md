@@ -61,7 +61,7 @@ whole engine to CPU.
 The NVIDIA image includes ONNX Runtime 1.29.0 with CUDA 12 and cuDNN:
 
 ```sh
-docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.0.2-cuda
+docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.0.3-cuda
 ```
 
 It is published for Linux amd64 and requires an NVIDIA driver compatible

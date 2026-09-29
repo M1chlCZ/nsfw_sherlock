@@ -784,7 +784,8 @@ func freePort(t *testing.T) int {
 
 func waitForServer(t *testing.T, baseURL string) {
 	t.Helper()
-	client := &http.Client{Timeout: time.Second}
+	client := &http.Client{Timeout: time.Second, Transport: &http.Transport{}}
+	defer client.CloseIdleConnections()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		resp, err := client.Get(baseURL + "/ping")
@@ -890,7 +891,8 @@ func TestStartWebServerCancelsInFlightRequests(t *testing.T) {
 
 	payload := base64.StdEncoding.EncodeToString([]byte("img"))
 	clientErr := make(chan error, 1)
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{}}
+	defer client.CloseIdleConnections()
 	go func() {
 		resp, err := client.Post(baseURL+"/pic/check", "application/json", strings.NewReader(picBody(payload, "")))
 		if err != nil {
@@ -922,6 +924,8 @@ func TestStartWebServerCancelsInFlightRequests(t *testing.T) {
 	if err := <-clientErr; err != nil {
 		t.Errorf("client request: %v", err)
 	}
+	// Close pooled test connections before waiting for the server to drain them.
+	client.CloseIdleConnections()
 	select {
 	case err := <-serverErr:
 		if err != nil {
