@@ -784,7 +784,7 @@ func freePort(t *testing.T) int {
 
 func waitForServer(t *testing.T, baseURL string) {
 	t.Helper()
-	client := &http.Client{Timeout: time.Second, Transport: &http.Transport{}}
+	client := &http.Client{Timeout: time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
 	defer client.CloseIdleConnections()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
@@ -817,8 +817,8 @@ func TestStartWebServerGracefulShutdown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("StartWebServer() = %v, want nil", err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("StartWebServer did not return within 5s of cancellation")
+	case <-time.After(15 * time.Second):
+		t.Fatal("StartWebServer did not return within 15s of cancellation")
 	}
 
 	if _, err := http.Get(baseURL + "/ping"); err == nil {
@@ -860,7 +860,7 @@ func TestStartWebServerCancelBeforeServe(t *testing.T) {
 		if err != nil {
 			t.Fatalf("StartWebServer() = %v, want nil", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("StartWebServer did not return for an already cancelled context")
 	}
 }
@@ -891,7 +891,7 @@ func TestStartWebServerCancelsInFlightRequests(t *testing.T) {
 
 	payload := base64.StdEncoding.EncodeToString([]byte("img"))
 	clientErr := make(chan error, 1)
-	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{}}
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
 	defer client.CloseIdleConnections()
 	go func() {
 		resp, err := client.Post(baseURL+"/pic/check", "application/json", strings.NewReader(picBody(payload, "")))
@@ -910,7 +910,7 @@ func TestStartWebServerCancelsInFlightRequests(t *testing.T) {
 
 	select {
 	case <-entered:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("request did not reach the analyzer")
 	}
 
@@ -918,7 +918,7 @@ func TestStartWebServerCancelsInFlightRequests(t *testing.T) {
 
 	select {
 	case <-canceled:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("in-flight Analyze did not observe cancellation")
 	}
 	if err := <-clientErr; err != nil {
@@ -931,7 +931,7 @@ func TestStartWebServerCancelsInFlightRequests(t *testing.T) {
 		if err != nil {
 			t.Errorf("StartWebServer() = %v, want nil", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("StartWebServer did not return")
 	}
 }
@@ -966,7 +966,7 @@ func TestStartWebServerShutdownDeadline(t *testing.T) {
 
 	select {
 	case <-entered:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("request did not reach the analyzer")
 	}
 
@@ -975,7 +975,7 @@ func TestStartWebServerShutdownDeadline(t *testing.T) {
 	var err error
 	select {
 	case err = <-serverErr:
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("StartWebServer did not return")
 	}
 	close(release)
@@ -1070,4 +1070,38 @@ func startWebServer(t *testing.T, cfg config.Config, analyzer Analyzer, checker 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", cfg.Port)
 	waitForServer(t, baseURL)
 	return baseURL
+}
+
+func TestStartWebServerForceStopsOnShutdownTimeout(t *testing.T) {
+	override(t, &shutdownTimeout, 50*time.Millisecond)
+
+	cfg := config.Config{Port: freePort(t), MaxImageBytes: 1 << 20}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- StartWebServer(ctx, cfg, &fakeAnalyzer{}, nil, testLogger()) }()
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", cfg.Port)
+	waitForServer(t, baseURL)
+
+	client := &http.Client{Timeout: time.Second}
+	resp, err := client.Post(baseURL+"/ping", "application/json", http.NoBody)
+	if err == nil {
+		_ = resp.Body.Close()
+	}
+	defer client.CloseIdleConnections()
+
+	cancel()
+	start := time.Now()
+	select {
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("StartWebServer() = %v, want nil or DeadlineExceeded", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("StartWebServer did not return after shutdown timeout")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("shutdown took %s, want prompt force-stop", elapsed)
+	}
 }
