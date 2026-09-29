@@ -1,0 +1,105 @@
+{
+  "activation": "none",
+  "input_names": [
+    "input"
+  ],
+  "kind": "classifier",
+  "labels": [
+    "safe",
+    "r15",
+    "r18"
+  ],
+  "model": "caformer_s36_plus.onnx",
+  "output_names": [
+    "output"
+  ],
+  "outputs": {
+    "output": {
+      "scores": {
+        "r15": 0.034184,
+        "r18": 0.059093,
+        "safe": 0.906723
+      },
+      "shape": [
+        1,
+        3
+      ],
+      "stats": {
+        "max": 0.9067234992980957,
+        "min": 0.03418353199958801,
+        "sum": 0.9999999478459358
+      },
+      "values": [
+        0.906723,
+        0.034184,
+        0.059093
+      ]
+    }
+  },
+  "preprocess": {
+    "crop_pct": 1.0,
+    "height": 384,
+    "image": {
+      "generator": "gradient-checkerboard-v1",
+      "height": 384,
+      "width": 512
+    },
+    "interpolation": "bicubic",
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "normalize": true,
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "tensor_sha256": "08c218f6ea2f90b4d94f63253b5b1c2be249a4d37ad3c51f4accd7e44586ee3b",
+    "tensor_sha256_note": "informational: the Go engine may round differently; compare tensor_stats",
+    "tensor_shape": [
+      1,
+      3,
+      384,
+      384
+    ],
+    "tensor_stats": {
+      "max": 2.640000104904175,
+      "mean": 0.2208128124475479,
+      "min": -2.0357141494750977
+    },
+    "width": 384
+  },
+  "reference": {
+    "config": {
+      "crop_mode": "center",
+      "crop_pct": 1.0,
+      "input_size": [
+        3,
+        384,
+        384
+      ],
+      "interpolation": "bicubic",
+      "mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "std": [
+        0.229,
+        0.224,
+        0.225
+      ]
+    },
+    "kind": "timm_transform",
+    "model": "caformer_s36.sail_in22k_ft_in1k_384",
+    "timm": "1.0.30"
+  },
+  "role": "anime",
+  "schema_version": 2,
+  "sha256": "fd5fdea9a8b610aa26a513df7e2e588a3fa0f641ba3408e5c67501663f501287",
+  "tolerance": {
+    "score": 0.05
+  }
+}

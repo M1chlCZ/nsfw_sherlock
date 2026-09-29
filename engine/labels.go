@@ -1,30 +1,30 @@
-package nsfw
+package engine
 
 const (
-	ThresholdSafe   = 0.75
-	ThresholdMedium = 0.85
-	ThresholdHigh   = 0.98
+	LegacyThresholdSafe   = 0.75
+	LegacyThresholdMedium = 0.85
+	LegacyThresholdHigh   = 0.98
 )
 
+// Labels holds the legacy five-label classifier output.
 type Labels struct {
-	Drawings float32
-	Hentai   float32
-	Neutral  float32
-	Porn     float32
-	Sexy     float32
+	Drawings float32 `json:"drawings"`
+	Hentai   float32 `json:"hentai"`
+	Neutral  float32 `json:"neutral"`
+	Porn     float32 `json:"porn"`
+	Sexy     float32 `json:"sexy"`
 }
 
 // IsNSFW returns false if the image is probably safe for work.
 func (l *Labels) IsNSFW() bool {
-	return l.NSFW(ThresholdSafe)
+	return l.NSFW(LegacyThresholdSafe)
 }
 
-// GetLabels returns the label values produced by TensorFlow.
+// GetLabels returns the label values produced by the model.
 func (l *Labels) GetLabels() Labels {
 	return *l
 }
 
-// NSFW returns true if the image is may not be safe for work.
 func (l *Labels) NSFW(threshold float32) bool {
 	if l.Neutral > 0.75 || l.Drawings > 0.75 {
 		if l.Porn < 0.1 && l.Sexy < 0.1 {

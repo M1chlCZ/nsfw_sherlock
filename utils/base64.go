@@ -1,18 +1,64 @@
 package utils
 
 import (
-	encoder "encoding/base64"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
 )
 
-func EncodePayload(base64 []byte) string {
-	return encoder.StdEncoding.EncodeToString(base64)
+const base64Marker = ";base64"
+
+// DecodePayload decodes a base64 payload into bytes.
+func DecodePayload(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	s = stripDataURLPrefix(s)
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, errors.New("empty base64 payload")
+	}
+	if strings.HasSuffix(s, "=") {
+		decoded, err := base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid base64 payload: %w", err)
+		}
+		return decoded, nil
+	}
+	decoded, err := base64.RawStdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid base64 payload: %w", err)
+	}
+	return decoded, nil
 }
 
-func DecodePayload(base64 []byte) ([]byte, error) {
-	b64 := make([]byte, encoder.StdEncoding.DecodedLen(len(base64)))
-	n, err := encoder.StdEncoding.Decode(b64, base64)
-	if err != nil {
-		return nil, err
+func stripDataURLPrefix(s string) string {
+	if !hasASCIIPrefixFold(s, "data:") {
+		return s
 	}
-	return b64[:n], nil
+	comma := strings.IndexByte(s, ',')
+	if comma < 0 {
+		return s
+	}
+	header := s[:comma]
+	if len(header) < len(base64Marker) || !strings.EqualFold(header[len(header)-len(base64Marker):], base64Marker) {
+		return s
+	}
+	return s[comma+1:]
+}
+
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i := range b {
+		if 'A' <= b[i] && b[i] <= 'Z' {
+			b[i] += 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+func hasASCIIPrefixFold(s, prefix string) bool {
+	if len(s) < len(prefix) {
+		return false
+	}
+	return asciiLower(s[:len(prefix)]) == prefix
 }

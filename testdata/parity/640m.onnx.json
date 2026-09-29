@@ -1,0 +1,132 @@
+{
+  "activation": "none",
+  "detections": [
+    {
+      "box": {
+        "h": 168.13915252685547,
+        "w": 186.8613052368164,
+        "x": 245.75162887573242,
+        "y": 479.7715950012207
+      },
+      "label": "FEMALE_BREAST_COVERED",
+      "score": 0.8074530959129333
+    },
+    {
+      "box": {
+        "h": 136.5972900390625,
+        "w": 147.20869064331055,
+        "x": 234.40133094787598,
+        "y": 174.14140701293945
+      },
+      "label": "FACE_FEMALE",
+      "score": 0.7530375123023987
+    },
+    {
+      "box": {
+        "h": 163.31470489501953,
+        "w": 170.29586791992188,
+        "x": 107.36408233642578,
+        "y": 461.04299545288086
+      },
+      "label": "FEMALE_BREAST_COVERED",
+      "score": 0.5486052632331848
+    }
+  ],
+  "detector": {
+    "classes": [
+      "FEMALE_GENITALIA_COVERED",
+      "FACE_FEMALE",
+      "BUTTOCKS_EXPOSED",
+      "FEMALE_BREAST_EXPOSED",
+      "FEMALE_GENITALIA_EXPOSED",
+      "MALE_BREAST_EXPOSED",
+      "ANUS_EXPOSED",
+      "FEET_EXPOSED",
+      "BELLY_COVERED",
+      "FEET_COVERED",
+      "ARMPITS_COVERED",
+      "ARMPITS_EXPOSED",
+      "FACE_MALE",
+      "BELLY_EXPOSED",
+      "MALE_GENITALIA_EXPOSED",
+      "ANUS_COVERED",
+      "FEMALE_BREAST_COVERED",
+      "BUTTOCKS_COVERED"
+    ],
+    "iou_threshold": 0.45,
+    "score_threshold": 0.25
+  },
+  "input_names": [
+    "images"
+  ],
+  "kind": "detector",
+  "labels": [],
+  "model": "640m.onnx",
+  "output_names": [
+    "output0"
+  ],
+  "outputs": {
+    "output0": {
+      "shape": [
+        1,
+        22,
+        8400
+      ],
+      "stats": {
+        "class_score_max": 0.8074530959129333,
+        "class_score_min": 0.0
+      }
+    }
+  },
+  "preprocess": {
+    "crop_pct": 0,
+    "height": 640,
+    "image": {
+      "generator": "file",
+      "height": 800,
+      "path": "testdata/pic.jpg",
+      "width": 547
+    },
+    "interpolation": "bilinear",
+    "mean": [
+      0,
+      0,
+      0
+    ],
+    "normalize": false,
+    "std": [
+      0,
+      0,
+      0
+    ],
+    "tensor_sha256": "ba5283cfb13ac32c33f836e828255044a36580fa10f59fbafe18116244990b62",
+    "tensor_sha256_note": "informational: the Go engine may round differently; compare tensor_stats",
+    "tensor_shape": [
+      1,
+      3,
+      640,
+      640
+    ],
+    "tensor_stats": {
+      "max": 1.0,
+      "mean": 0.25326788425445557,
+      "min": 0.0
+    },
+    "width": 640
+  },
+  "reference": {
+    "channel_order": "BGR",
+    "implementation": "nudenet 3.4.2 _read_image (cv2 blobFromImage) / _postprocess (numpy)",
+    "input_size": 640,
+    "kind": "nudenet",
+    "opencv": "5.0.0",
+    "padding": "black, right/bottom, top-left anchored"
+  },
+  "role": "regions",
+  "schema_version": 2,
+  "sha256": "04fe3d77980780c1f8297dc6d7f942fd5b3abe6942a188f742a85241e4f634eb",
+  "tolerance": {
+    "box_px": 2,
+    "score": 0.05
+  }
+}
