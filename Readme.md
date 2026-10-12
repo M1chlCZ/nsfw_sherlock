@@ -7,7 +7,6 @@
 <p align="center"><strong>Free, self-hosted image moderation.</strong><br>Run it on your server. Keep image analysis local.</p>
 
 [![License: AGPL](https://img.shields.io/badge/license-AGPL-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)
-[![Go Report Card](https://goreportcard.com/badge/github.com/M1chlCZ/nsfw_sherlock)](https://goreportcard.com/report/github.com/M1chlCZ/nsfw_sherlock)
 [![Docker Hub](https://img.shields.io/docker/v/m1chl/nsfw-sherlock/latest?color=green&label=Docker%20Hub&style=flat)](https://hub.docker.com/repository/docker/m1chl/nsfw-sherlock/general)
 
 NSFW Sherlock is a free, open-source API that checks images for NSFW content on your own hardware.
