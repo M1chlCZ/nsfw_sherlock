@@ -1,12 +1,26 @@
-# NSFW Sherlock
+<p align="center">
+  <img src="docs/brand/logo.svg" alt="NSFW Sherlock logo: a magnifying glass over an image" width="128" height="128">
+</p>
+
+<h1 align="center">NSFW Sherlock</h1>
+
+<p align="center"><strong>Free, self-hosted image moderation.</strong><br>Run it on your server. Keep image analysis local.</p>
 
 [![License: AGPL](https://img.shields.io/badge/license-AGPL-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)
 [![Go Report Card](https://goreportcard.com/badge/github.com/M1chlCZ/nsfw_sherlock)](https://goreportcard.com/report/github.com/M1chlCZ/nsfw_sherlock)
 [![Docker Hub](https://img.shields.io/docker/v/m1chl/nsfw-sherlock/latest?color=green&label=Docker%20Hub&style=flat)](https://hub.docker.com/repository/docker/m1chl/nsfw-sherlock/general)
 
-An image classification API for NSFW content, with HTTP and gRPC interfaces.
-One Go binary uses ONNX Runtime to classify photos and anime, detect explicit regions, and combine the results.
-Optional Tesseract OCR detects words in images.
+NSFW Sherlock is a free, open-source API that checks images for NSFW content on your own hardware.
+It has no subscription or per-image API fees. You cover your own hardware and hosting costs.
+
+- **Self-hosted:** Image analysis runs on your server, without an external moderation API.
+- **Easy to connect:** Use HTTP or gRPC from your application.
+- **Image checks:** Classify photos and anime, and detect explicit regions.
+- **Optional OCR:** Use Tesseract to detect words in images.
+- **Docker:** Start with one command on Linux amd64 or arm64.
+
+One Go binary runs the models with ONNX Runtime.
+The code uses AGPL-3.0. [Model licenses](#models-and-licenses) apply separately.
 
 ## Run with Docker
 

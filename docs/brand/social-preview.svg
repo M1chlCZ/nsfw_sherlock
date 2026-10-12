@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+<title id="title">NSFW Sherlock — Free, self-hosted image moderation</title>
+<desc id="desc">The Sherlock magnifying glass logo with HTTP, gRPC, Docker, and local image analysis.</desc>
+<rect width="1280" height="640" fill="#112B3C"/>
+<path d="M80 80h64" stroke="#45DBC3" stroke-width="6" stroke-linecap="round"/>
+<text x="80" y="140" fill="#A7BCC8" font-family="Arial, sans-serif" font-size="22" letter-spacing="3">OPEN SOURCE · AGPL-3.0</text>
+<text x="76" y="260" fill="#F3FAFC" font-family="Arial, sans-serif" font-size="78" font-weight="700" letter-spacing="-3">NSFW Sherlock</text>
+<text x="80" y="334" fill="#45DBC3" font-family="Arial, sans-serif" font-size="34" font-weight="700">Free, self-hosted image moderation.</text>
+<text x="80" y="389" fill="#C9D9E2" font-family="Arial, sans-serif" font-size="25">Your server. Local image analysis. No API fees.</text>
+<g transform="translate(935 190) scale(1.02)">  <rect x="8" y="8" width="240" height="240" rx="56" fill="#112B3C"/>
+  <path d="m158 158 40 40" fill="none" stroke="#45DBC3" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="112" cy="112" r="61" fill="none" stroke="#F3FAFC" stroke-width="16"/>
+  <path d="M82 125V90a7 7 0 0 1 7-7h46a7 7 0 0 1 7 7v44a7 7 0 0 1-7 7H89a7 7 0 0 1-7-7z" fill="none" stroke="#45DBC3" stroke-width="7" stroke-linejoin="round"/>
+  <path d="m83 128 19-20 15 15 10-10 14 15" fill="none" stroke="#45DBC3" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="128" cy="97" r="5" fill="#F3FAFC"/>
+</g>
+<path d="M80 470h1120" stroke="#36505F"/>
+<text x="80" y="530" fill="#F3FAFC" font-family="Arial, sans-serif" font-size="23">Go  /  HTTP + gRPC  /  Docker</text>
+<text x="1200" y="530" text-anchor="end" fill="#A7BCC8" font-family="Arial, sans-serif" font-size="21">github.com/M1chlCZ/nsfw_sherlock</text>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">NSFW Sherlock</title>
+  <desc id="desc">A magnifying glass inspects an image, in teal and navy.</desc>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#112B3C"/>
+  <path d="m158 158 40 40" fill="none" stroke="#45DBC3" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="112" cy="112" r="61" fill="none" stroke="#F3FAFC" stroke-width="16"/>
+  <path d="M82 125V90a7 7 0 0 1 7-7h46a7 7 0 0 1 7 7v44a7 7 0 0 1-7 7H89a7 7 0 0 1-7-7z" fill="none" stroke="#45DBC3" stroke-width="7" stroke-linejoin="round"/>
+  <path d="m83 128 19-20 15 15 10-10 14 15" fill="none" stroke="#45DBC3" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="128" cy="97" r="5" fill="#F3FAFC"/>
+</svg>
