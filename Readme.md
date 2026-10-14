@@ -89,7 +89,7 @@ Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Tool
 Then run the CUDA image:
 
 ```sh
-docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.0.4-cuda
+docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.0.5-cuda
 ```
 
 This image supports Linux amd64. It includes ONNX Runtime 1.29.0, CUDA 12, and cuDNN.
