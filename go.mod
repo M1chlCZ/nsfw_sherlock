@@ -3,7 +3,7 @@ module nsfw_sherlock
 go 1.27.0
 
 require (
-	github.com/gofiber/fiber/v3 v3.5.0
+	github.com/gofiber/fiber/v3 v3.6.0
 	github.com/otiai10/gosseract/v2 v2.4.1
 	github.com/yalue/onnxruntime_go v1.36.0
 	golang.org/x/image v0.47.0
