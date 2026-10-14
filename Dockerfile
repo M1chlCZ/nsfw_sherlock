@@ -22,6 +22,8 @@ RUN if [ -n "$MODELS_BASE_URL" ]; then \
 
 FROM golang:1.27-bookworm AS builder
 
+ARG VERSION=dev
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libtesseract-dev libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -30,7 +32,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 go build -tags ocr -ldflags "-s -w" -o /out/nsfw-sherlock .
+RUN CGO_ENABLED=1 go build -tags ocr -ldflags "-s -w -X main.version=${VERSION}" -o /out/nsfw-sherlock .
 
 FROM ${RUNTIME_IMAGE} AS runtime
 

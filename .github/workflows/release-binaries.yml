@@ -1,0 +1,71 @@
+name: Release binaries
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            os: linux
+            arch: amd64
+          - runner: ubuntu-22.04-arm
+            os: linux
+            arch: arm64
+          - runner: macos-14
+            os: darwin
+            arch: arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Build and archive
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -eu
+          CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -X main.version=${VERSION#v}" -o nsfw-sherlock .
+          tar -czf "nsfw-sherlock_${VERSION#v}_${{ matrix.os }}_${{ matrix.arch }}.tar.gz" nsfw-sherlock
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nsfw-sherlock_${{ matrix.os }}_${{ matrix.arch }}
+          path: nsfw-sherlock_*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Attach binaries to the release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          set -eu
+          (cd dist && sha256sum nsfw-sherlock_*.tar.gz > checksums.txt)
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" dist/*.tar.gz dist/checksums.txt --clobber

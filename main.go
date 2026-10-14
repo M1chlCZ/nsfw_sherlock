@@ -16,7 +16,13 @@ import (
 	"nsfw_sherlock/web"
 )
 
+var version = "dev"
+
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Fprintln(os.Stdout, version)
+		return
+	}
 	os.Exit(run())
 }
 

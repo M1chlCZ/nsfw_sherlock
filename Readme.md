@@ -40,6 +40,20 @@ Docker Hub and [GHCR](https://github.com/M1chlCZ/nsfw_sherlock/pkgs/container/ns
 
 For gRPC, set `APP_ENV=grpc`. The default interface is HTTP.
 
+## Run a release binary
+
+The [releases page](https://github.com/M1chlCZ/nsfw_sherlock/releases) has archives for Linux amd64, Linux arm64, and macOS arm64, with checksums.
+The binaries do not include OCR support.
+
+Clone the repository and unpack the archive into it.
+Then download the models and the runtime:
+
+```sh
+scripts/fetch-models.sh --ort-only
+scripts/fetch-models.sh
+./nsfw-sherlock
+```
+
 ## API
 
 All image endpoints accept this JSON request:
