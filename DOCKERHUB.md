@@ -97,9 +97,17 @@ Keep the provider libraries beside it and add the ROCm dependencies to the libra
 
 The `rocm` value is an alias for `migraphx`. The Go binding requires ORT API 29, so older runtimes are incompatible. This project does not publish an AMD image.
 
+### NVIDIA · TensorRT
+
+Use an ONNX Runtime shared library built with the TensorRT execution provider, then set `ORT_PROVIDER=tensorrt`. TensorRT compiles each model for your GPU at the first run. This step is slow.
+
+### Intel · OpenVINO
+
+Use an ONNX Runtime shared library built with the OpenVINO execution provider, then set `ORT_PROVIDER=openvino`. OpenVINO runs on an Intel CPU or GPU.
+
 If the selected provider is unavailable, the service stops at startup. Unsupported operators can still use the CPU.
 
-**GPU inference remains untested on physical NVIDIA or AMD hardware.**
+**The GPU execution providers remain untested on physical hardware.**
 
 ## Configuration
 
@@ -108,7 +116,7 @@ If the selected provider is unavailable, the service stops at startup. Unsupport
 | `APP_ENV` | `web` | HTTP (`web`) or gRPC (`grpc`). `http` is a deprecated alias. |
 | `PORT` | `4000` | Service port |
 | `NSFW_PROFILE` | `balanced` | Model profile |
-| `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, or `migraphx`. `rocm` aliases `migraphx`. |
+| `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, `migraphx`, `tensorrt`, or `openvino`. `rocm` aliases `migraphx`. |
 | `ORT_DEVICE_ID` | `0` | GPU index |
 | `OCR_ENABLED` | `true` | Text detection. Requires a build with OCR support. |
 | `MODELS_DIR` | `./assets/models` | Model directory |

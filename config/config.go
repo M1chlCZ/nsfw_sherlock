@@ -242,6 +242,8 @@ func (cfg *Config) loadGPU(getenv func(string) string) error {
 		"cuda",
 		"migraphx",
 		"rocm",
+		"tensorrt",
+		"openvino",
 	); err != nil {
 		return err
 	}

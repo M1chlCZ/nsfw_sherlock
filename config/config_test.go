@@ -270,7 +270,7 @@ func TestLoadInvalidGPUConfig(t *testing.T) {
 }
 
 func TestLoadGPUConfig(t *testing.T) {
-	for _, provider := range []string{"cpu", "cuda", "migraphx", "rocm"} {
+	for _, provider := range []string{"cpu", "cuda", "migraphx", "rocm", "tensorrt", "openvino"} {
 		cfg, err := Load(getenvFrom(map[string]string{"ORT_PROVIDER": provider, "ORT_DEVICE_ID": "2"}))
 		if err != nil {
 			t.Fatal(err)

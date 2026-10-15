@@ -15,7 +15,7 @@ func newSessionOptions(provider string, deviceID int) (*ort.SessionOptions, erro
 	switch provider {
 	case "", "cpu":
 		return nil, nil //nolint:nilnil // A nil session option selects ORT CPU defaults.
-	case "cuda", "migraphx":
+	case "cuda", "migraphx", "tensorrt", "openvino":
 	default:
 		return nil, fmt.Errorf("engine: unknown execution provider %q", provider)
 	}
@@ -23,17 +23,23 @@ func newSessionOptions(provider string, deviceID int) (*ort.SessionOptions, erro
 	if err != nil {
 		return nil, fmt.Errorf("engine: create %s session options: %w", provider, err)
 	}
-	if provider == "cuda" {
+	switch provider {
+	case "cuda":
 		err = appendCUDA(options, deviceID)
-	} else {
+	case "tensorrt":
+		err = appendTensorRT(options, deviceID)
+	case "openvino":
+		err = options.AppendExecutionProviderOpenVINO(map[string]string{"device_id": strconv.Itoa(deviceID)})
+	default:
 		err = options.AppendExecutionProvider("MIGraphX", map[string]string{"device_id": strconv.Itoa(deviceID)})
 	}
 	if err != nil {
 		_ = options.Destroy()
 		return nil, fmt.Errorf(
-			"engine: enable %s device %d (requires a compatible GPU-enabled ORT_LIB): %w",
+			"engine: enable %s device %d (requires an ORT_LIB with the %s execution provider): %w",
 			provider,
 			deviceID,
+			provider,
 			err,
 		)
 	}
@@ -50,4 +56,16 @@ func appendCUDA(options *ort.SessionOptions, deviceID int) error {
 		return err
 	}
 	return options.AppendExecutionProviderCUDA(cuda)
+}
+
+func appendTensorRT(options *ort.SessionOptions, deviceID int) error {
+	trt, err := ort.NewTensorRTProviderOptions()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = trt.Destroy() }()
+	if err := trt.Update(map[string]string{"device_id": strconv.Itoa(deviceID)}); err != nil {
+		return err
+	}
+	return options.AppendExecutionProviderTensorRT(trt)
 }
