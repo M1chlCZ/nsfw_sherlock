@@ -1105,3 +1105,161 @@ func TestStartWebServerForceStopsOnShutdownTimeout(t *testing.T) {
 		t.Errorf("shutdown took %s, want prompt force-stop", elapsed)
 	}
 }
+
+func TestPicBatchHappyPath(t *testing.T) {
+	image := []byte("fake-image-bytes")
+	payload := base64.StdEncoding.EncodeToString(image)
+	analyzer := &fakeAnalyzer{analysis: engine.Analysis{Labels: engine.Labels{Porn: 0.9}}}
+	app := NewApp(
+		config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 4},
+		analyzer,
+		func(context.Context, []byte) (bool, error) { return true, nil },
+		testLogger(),
+	)
+
+	req, err := json.Marshal(batchRequest{Images: []picRequest{
+		{Base64: payload, Filename: "a.png"},
+		{Base64: "data:image/png;base64," + payload, Filename: "b.png"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, body := doRequest(t, app, http.MethodPost, "/pic/batch", string(req))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", status, body)
+	}
+	fields := decodeJSON(t, body)
+	if fields["status"] != "ok" || fields["message"] != "success" {
+		t.Fatalf("body = %v", fields)
+	}
+	results, ok := fields["results"].([]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("results = %v, want 2 items", fields["results"])
+	}
+	for i, item := range results {
+		want := map[string]any{
+			"status":   "ok",
+			"message":  "success",
+			"nsfwText": true,
+			"nsfwPic":  true,
+		}
+		if !reflect.DeepEqual(item, want) {
+			t.Errorf("results[%d] = %v, want %v", i, item, want)
+		}
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 2 {
+		t.Errorf("Analyze calls = %d, want 2", calls)
+	}
+}
+
+func TestPicBatchPartialErrors(t *testing.T) {
+	image := []byte("fake-image-bytes")
+	payload := base64.StdEncoding.EncodeToString(image)
+	analyzer := &fakeAnalyzer{analysis: engine.Analysis{Labels: engine.Labels{Neutral: 0.9}}}
+	app := NewApp(config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 4}, analyzer, nil, testLogger())
+
+	req, err := json.Marshal(batchRequest{Images: []picRequest{
+		{Base64: "%%%%"},
+		{Base64: ""},
+		{Base64: payload},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, body := doRequest(t, app, http.MethodPost, "/pic/batch", string(req))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", status, body)
+	}
+	results, ok := decodeJSON(t, body)["results"].([]any)
+	if !ok || len(results) != 3 {
+		t.Fatalf("results = %v, want 3 items", decodeJSON(t, body)["results"])
+	}
+	for _, i := range []int{0, 1} {
+		item, ok := results[i].(map[string]any)
+		if !ok || item["status"] != "FAIL" || item["hasError"] != true {
+			t.Errorf("results[%d] = %v, want the legacy error body", i, results[i])
+		}
+	}
+	last, ok := results[2].(map[string]any)
+	if !ok || last["status"] != "ok" {
+		t.Errorf("results[2] = %v, want an ok result", results[2])
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 1 {
+		t.Errorf("Analyze calls = %d, want 1", calls)
+	}
+}
+
+func TestPicBatchValidation(t *testing.T) {
+	app := NewApp(config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 2}, &fakeAnalyzer{}, nil, testLogger())
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{"empty batch", `{"images":[]}`},
+		{"missing images", `{}`},
+		{"over the limit", `{"images":[{"base64":"aGk"},{"base64":"aGk"},{"base64":"aGk"}]}`},
+		{"invalid JSON", `{"images":`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			status, body := doRequest(t, app, http.MethodPost, "/pic/batch", tt.body)
+			if status != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body: %s", status, body)
+			}
+			assertLegacyError(t, body)
+		})
+	}
+}
+
+func TestPicBatchBoundedFanOut(t *testing.T) {
+	image := []byte("fake-image-bytes")
+	payload := base64.StdEncoding.EncodeToString(image)
+	var inFlight, peak atomic.Int64
+	analyzer := &fakeAnalyzer{fn: func(ctx context.Context, data []byte) (engine.Analysis, error) {
+		current := inFlight.Add(1)
+		defer inFlight.Add(-1)
+		for {
+			seen := peak.Load()
+			if current <= seen || peak.CompareAndSwap(seen, current) {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+		return engine.Analysis{}, nil
+	}}
+	app := NewApp(config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 20}, analyzer, nil, testLogger())
+
+	images := make([]picRequest, 20)
+	for i := range images {
+		images[i] = picRequest{Base64: payload}
+	}
+	req, err := json.Marshal(batchRequest{Images: images})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, body := doRequest(t, app, http.MethodPost, "/pic/batch", string(req))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", status, body)
+	}
+	if got := peak.Load(); got > int64(requestConcurrency) {
+		t.Errorf("peak concurrency = %d, want at most %d", got, requestConcurrency)
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 20 {
+		t.Errorf("Analyze calls = %d, want 20", calls)
+	}
+}
+
+func TestBatchBodyLimit(t *testing.T) {
+	const maxImageBytes = int64(1 << 20)
+	if got, want := batchBodyLimit(maxImageBytes, 1), bodyLimitFor(maxImageBytes); got != want {
+		t.Errorf("batchBodyLimit(%d, 1) = %d, want %d", maxImageBytes, got, want)
+	}
+	if got, want := batchBodyLimit(maxImageBytes, 4), bodyLimitFor(maxImageBytes)*4; got != want {
+		t.Errorf("batchBodyLimit(%d, 4) = %d, want %d", maxImageBytes, got, want)
+	}
+	if got := batchBodyLimit(maxImageBytes, 0); got != bodyLimitFor(maxImageBytes) {
+		t.Errorf("batchBodyLimit with a zero limit = %d, want the single limit", got)
+	}
+	if got := batchBodyLimit(math.MaxInt32, 64); got != math.MaxInt32 {
+		t.Errorf("batchBodyLimit(%d, 64) = %d, want saturation at %d", math.MaxInt32, got, math.MaxInt32)
+	}
+}

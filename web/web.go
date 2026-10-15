@@ -18,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v3/middleware/recover"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -48,6 +49,7 @@ type handlers struct {
 	analyzer Analyzer
 	checker  TextChecker
 	timeout  time.Duration
+	batchMax int
 }
 
 // NewApp builds the HTTP application with the legacy routes and middleware.
@@ -73,13 +75,14 @@ func newApp(
 		analyzer: analyzer,
 		checker:  ocrguard.Guard(checker, ocrConcurrency, ocrTimeout),
 		timeout:  analyzeTimeout,
+		batchMax: max(cfg.BatchMaxImages, 1),
 	}
 	limit := concurrencyLimiter(make(chan struct{}, requestConcurrency))
 
 	app := fiber.New(fiber.Config{
 		AppName:       "NSFW Detector API",
 		StrictRouting: false,
-		BodyLimit:     bodyLimitFor(cfg.MaxImageBytes),
+		BodyLimit:     batchBodyLimit(cfg.MaxImageBytes, h.batchMax),
 		ReadTimeout:   serverTimeout,
 		WriteTimeout:  serverTimeout,
 		IdleTimeout:   serverTimeout,
@@ -95,6 +98,7 @@ func newApp(
 	app.Post("/pic/check", limit, h.picCheck)
 	app.Post("/pic/labels", limit, h.picLabels)
 	app.Post("/pic/analyze", limit, h.picAnalyze)
+	app.Post("/pic/batch", limit, h.picBatch)
 	return app
 }
 
@@ -233,18 +237,8 @@ func (h *handlers) picAnalyze(c fiber.Ctx) error {
 }
 
 func (h *handlers) analyze(c fiber.Ctx) (engine.Analysis, []byte, bool) {
-	var req picRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
-		return engine.Analysis{}, nil, false
-	}
-	if req.Base64 == "" {
-		_ = utils.ReportError(c, "Bad Request", fiber.StatusBadRequest)
-		return engine.Analysis{}, nil, false
-	}
-	data, err := utils.DecodePayload(req.Base64)
-	if err != nil {
-		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+	data, ok := h.picData(c)
+	if !ok {
 		return engine.Analysis{}, nil, false
 	}
 
@@ -259,6 +253,88 @@ func (h *handlers) analyze(c fiber.Ctx) (engine.Analysis, []byte, bool) {
 		analysis.Detections = []engine.Detection{}
 	}
 	return analysis, data, true
+}
+
+func (h *handlers) picData(c fiber.Ctx) ([]byte, bool) {
+	var req picRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+		return nil, false
+	}
+	if req.Base64 == "" {
+		_ = utils.ReportError(c, "Bad Request", fiber.StatusBadRequest)
+		return nil, false
+	}
+	data, err := utils.DecodePayload(req.Base64)
+	if err != nil {
+		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+		return nil, false
+	}
+	return data, true
+}
+
+type batchRequest struct {
+	Images []picRequest `json:"images"`
+}
+
+type batchResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Results []any  `json:"results"`
+}
+
+func (h *handlers) picBatch(c fiber.Ctx) error {
+	var req batchRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+	}
+	if len(req.Images) == 0 {
+		return utils.ReportError(c, "no images in the batch", fiber.StatusBadRequest)
+	}
+	if len(req.Images) > h.batchMax {
+		return utils.ReportError(
+			c,
+			fmt.Sprintf("the batch limit is %d images", h.batchMax),
+			fiber.StatusBadRequest,
+		)
+	}
+	results := make([]any, len(req.Images))
+	g, gctx := errgroup.WithContext(c.Context())
+	g.SetLimit(min(h.batchMax, requestConcurrency))
+	for i := range req.Images {
+		g.Go(func() error {
+			results[i] = h.checkOne(gctx, req.Images[i])
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return c.JSON(batchResponse{Status: "ok", Message: successMessage, Results: results})
+}
+
+func (h *handlers) checkOne(ctx context.Context, req picRequest) any {
+	if req.Base64 == "" {
+		return utils.ErrorResult("Bad Request")
+	}
+	data, err := utils.DecodePayload(req.Base64)
+	if err != nil {
+		return utils.ErrorResult(err.Error())
+	}
+	ctx, cancel := context.WithTimeout(ctx, h.timeout)
+	defer cancel()
+	analysis, err := h.analyzer.Analyze(ctx, data)
+	if err != nil {
+		return utils.ErrorResult(err.Error())
+	}
+	nsfwText, err := h.textNSFW(ctx, data)
+	if err != nil {
+		return utils.ErrorResult(err.Error())
+	}
+	return checkResponse{
+		Status:   "ok",
+		Message:  successMessage,
+		NSFWText: nsfwText,
+		NSFWPic:  analysis.LegacyNSFW(),
+	}
 }
 
 func (h *handlers) textNSFW(ctx context.Context, data []byte) (bool, error) {
@@ -297,6 +373,18 @@ func bodyLimitFor(maxImageBytes int64) int {
 		return math.MaxInt32
 	}
 	return int(limit)
+}
+
+func batchBodyLimit(maxImageBytes int64, batchMax int) int {
+	single := int64(bodyLimitFor(maxImageBytes))
+	if batchMax < 1 {
+		batchMax = 1
+	}
+	scaled := single * int64(batchMax)
+	if scaled > math.MaxInt32 || scaled < single {
+		return math.MaxInt32
+	}
+	return int(scaled)
 }
 
 func requestContext(baseCtx context.Context) fiber.Handler {

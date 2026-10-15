@@ -68,6 +68,7 @@ All image endpoints accept this JSON request:
 | `POST /pic/check` | `nsfwPic` and `nsfwText` flags |
 | `POST /pic/labels` | Probabilities for `drawings`, `hentai`, `neutral`, `porn`, and `sexy` |
 | `POST /pic/analyze` | Full analysis, model scores, region detections, and elapsed time |
+| `POST /pic/batch` | One `/pic/check` result per image, up to `BATCH_MAX_IMAGES` |
 
 Example response from `/pic/check`:
 
@@ -77,6 +78,10 @@ Example response from `/pic/check`:
 
 The full analysis includes a `verdict` (`sfw`, `suggestive`, or `explicit`) and an `nsfw` score.
 Errors use `{"errorMessage":"...","status":"FAIL","hasError":true}`.
+
+The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns `{"status":"ok","message":"success","results":[...]}`.
+Each result is a `/pic/check` body or the error body.
+The default limit is 4 images.
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
 The [service definition](proto/nsfw.proto) contains the request and response types.
@@ -146,6 +151,7 @@ Unsupported operators can still use the CPU.
 | `MAX_IMAGE_BYTES` | `20971520` (20 MiB) | Maximum image size |
 | `MAX_IMAGE_PIXELS` | `50000000` | Maximum decoded pixel count |
 | `SESSION_POOL_SIZE` | `2` | Sessions per model |
+| `BATCH_MAX_IMAGES` | `4` | Images per `/pic/batch` request (1..64). Raises the request body limit. |
 | `NSFW_ALLOW_DEGRADED` | `false` | Allow startup after a required model fails to load. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `LOG_FORMAT` | `text` | `text` or `json` |

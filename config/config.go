@@ -21,6 +21,7 @@ const (
 	envMaxImageBytes   = "MAX_IMAGE_BYTES"
 	envMaxImagePixels  = "MAX_IMAGE_PIXELS"
 	envSessionPoolSize = "SESSION_POOL_SIZE"
+	envBatchMaxImages  = "BATCH_MAX_IMAGES"
 	envLogLevel        = "LOG_LEVEL"
 	envLogFormat       = "LOG_FORMAT"
 )
@@ -36,6 +37,8 @@ const (
 	defaultMaxImageBytes   = 20 << 20
 	defaultMaxImagePixels  = 50_000_000
 	defaultSessionPoolSize = 2
+	defaultBatchMaxImages  = 4
+	maxBatchImages         = 64
 	defaultLogLevel        = "info"
 	defaultLogFormat       = "text"
 )
@@ -56,6 +59,7 @@ type Config struct {
 	MaxImageBytes   int64
 	MaxImagePixels  int64
 	SessionPoolSize int
+	BatchMaxImages  int
 	LogLevel        string
 	LogFormat       string
 }
@@ -75,6 +79,7 @@ func Load(getenv func(string) string) (Config, error) {
 		MaxImageBytes:   defaultMaxImageBytes,
 		MaxImagePixels:  defaultMaxImagePixels,
 		SessionPoolSize: defaultSessionPoolSize,
+		BatchMaxImages:  defaultBatchMaxImages,
 		LogLevel:        defaultLogLevel,
 		LogFormat:       defaultLogFormat,
 	}
@@ -140,6 +145,17 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if cfg.SessionPoolSize < 1 {
 		return Config{}, fmt.Errorf("config: %s: value %d must be at least 1", envSessionPoolSize, cfg.SessionPoolSize)
+	}
+	if cfg.BatchMaxImages, err = intFromEnv(getenv, envBatchMaxImages, cfg.BatchMaxImages); err != nil {
+		return Config{}, err
+	}
+	if cfg.BatchMaxImages < 1 || cfg.BatchMaxImages > maxBatchImages {
+		return Config{}, fmt.Errorf(
+			"config: %s: value %d must be in 1..%d",
+			envBatchMaxImages,
+			cfg.BatchMaxImages,
+			maxBatchImages,
+		)
 	}
 
 	if cfg.LogLevel, err = enumFromEnv(

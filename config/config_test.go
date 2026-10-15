@@ -24,6 +24,7 @@ func wantDefaults() Config {
 		MaxImageBytes:   20 << 20,
 		MaxImagePixels:  50_000_000,
 		SessionPoolSize: 2,
+		BatchMaxImages:  4,
 		LogLevel:        "info",
 		LogFormat:       "text",
 	}
@@ -265,6 +266,28 @@ func TestLoadInvalidGPUConfig(t *testing.T) {
 	} {
 		if _, err := Load(getenvFrom(env)); err == nil {
 			t.Errorf("Load(%v) accepted invalid GPU configuration", env)
+		}
+	}
+}
+
+func TestLoadBatchMaxImages(t *testing.T) {
+	cfg, err := Load(getenvFrom(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BatchMaxImages != 4 {
+		t.Fatalf("default BatchMaxImages = %d, want 4", cfg.BatchMaxImages)
+	}
+	cfg, err = Load(getenvFrom(map[string]string{"BATCH_MAX_IMAGES": "8"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BatchMaxImages != 8 {
+		t.Fatalf("BatchMaxImages = %d, want 8", cfg.BatchMaxImages)
+	}
+	for _, value := range []string{"0", "65", "invalid"} {
+		if _, err := Load(getenvFrom(map[string]string{"BATCH_MAX_IMAGES": value})); err == nil {
+			t.Errorf("Load(BATCH_MAX_IMAGES=%s) accepted an invalid value", value)
 		}
 	}
 }
