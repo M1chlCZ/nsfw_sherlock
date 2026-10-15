@@ -22,6 +22,7 @@ const (
 	envMaxImagePixels  = "MAX_IMAGE_PIXELS"
 	envSessionPoolSize = "SESSION_POOL_SIZE"
 	envBatchMaxImages  = "BATCH_MAX_IMAGES"
+	envCacheEntries    = "CACHE_ENTRIES"
 	envLogLevel        = "LOG_LEVEL"
 	envLogFormat       = "LOG_FORMAT"
 )
@@ -39,6 +40,8 @@ const (
 	defaultSessionPoolSize = 2
 	defaultBatchMaxImages  = 4
 	maxBatchImages         = 64
+	defaultCacheEntries    = 0
+	maxCacheEntries        = 100_000
 	defaultLogLevel        = "info"
 	defaultLogFormat       = "text"
 )
@@ -60,6 +63,7 @@ type Config struct {
 	MaxImagePixels  int64
 	SessionPoolSize int
 	BatchMaxImages  int
+	CacheEntries    int
 	LogLevel        string
 	LogFormat       string
 }
@@ -80,6 +84,7 @@ func Load(getenv func(string) string) (Config, error) {
 		MaxImagePixels:  defaultMaxImagePixels,
 		SessionPoolSize: defaultSessionPoolSize,
 		BatchMaxImages:  defaultBatchMaxImages,
+		CacheEntries:    defaultCacheEntries,
 		LogLevel:        defaultLogLevel,
 		LogFormat:       defaultLogFormat,
 	}
@@ -124,40 +129,9 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	cfg.BadWordsFile = stringFromEnv(getenv, envBadWordsFile, cfg.BadWordsFile)
 
-	if cfg.MaxImageBytes, err = int64FromEnv(getenv, envMaxImageBytes, cfg.MaxImageBytes); err != nil {
+	if err := cfg.loadLimits(getenv); err != nil {
 		return Config{}, err
 	}
-	if cfg.MaxImageBytes <= 0 {
-		return Config{}, fmt.Errorf("config: %s: value %d must be greater than 0", envMaxImageBytes, cfg.MaxImageBytes)
-	}
-	if cfg.MaxImagePixels, err = int64FromEnv(getenv, envMaxImagePixels, cfg.MaxImagePixels); err != nil {
-		return Config{}, err
-	}
-	if cfg.MaxImagePixels <= 0 {
-		return Config{}, fmt.Errorf(
-			"config: %s: value %d must be greater than 0",
-			envMaxImagePixels,
-			cfg.MaxImagePixels,
-		)
-	}
-	if cfg.SessionPoolSize, err = intFromEnv(getenv, envSessionPoolSize, cfg.SessionPoolSize); err != nil {
-		return Config{}, err
-	}
-	if cfg.SessionPoolSize < 1 {
-		return Config{}, fmt.Errorf("config: %s: value %d must be at least 1", envSessionPoolSize, cfg.SessionPoolSize)
-	}
-	if cfg.BatchMaxImages, err = intFromEnv(getenv, envBatchMaxImages, cfg.BatchMaxImages); err != nil {
-		return Config{}, err
-	}
-	if cfg.BatchMaxImages < 1 || cfg.BatchMaxImages > maxBatchImages {
-		return Config{}, fmt.Errorf(
-			"config: %s: value %d must be in 1..%d",
-			envBatchMaxImages,
-			cfg.BatchMaxImages,
-			maxBatchImages,
-		)
-	}
-
 	if cfg.LogLevel, err = enumFromEnv(
 		getenv,
 		envLogLevel,
@@ -173,6 +147,55 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func (cfg *Config) loadLimits(getenv func(string) string) error {
+	var err error
+	if cfg.MaxImageBytes, err = int64FromEnv(getenv, envMaxImageBytes, cfg.MaxImageBytes); err != nil {
+		return err
+	}
+	if cfg.MaxImageBytes <= 0 {
+		return fmt.Errorf("config: %s: value %d must be greater than 0", envMaxImageBytes, cfg.MaxImageBytes)
+	}
+	if cfg.MaxImagePixels, err = int64FromEnv(getenv, envMaxImagePixels, cfg.MaxImagePixels); err != nil {
+		return err
+	}
+	if cfg.MaxImagePixels <= 0 {
+		return fmt.Errorf(
+			"config: %s: value %d must be greater than 0",
+			envMaxImagePixels,
+			cfg.MaxImagePixels,
+		)
+	}
+	if cfg.SessionPoolSize, err = intFromEnv(getenv, envSessionPoolSize, cfg.SessionPoolSize); err != nil {
+		return err
+	}
+	if cfg.SessionPoolSize < 1 {
+		return fmt.Errorf("config: %s: value %d must be at least 1", envSessionPoolSize, cfg.SessionPoolSize)
+	}
+	if cfg.BatchMaxImages, err = intFromEnv(getenv, envBatchMaxImages, cfg.BatchMaxImages); err != nil {
+		return err
+	}
+	if cfg.BatchMaxImages < 1 || cfg.BatchMaxImages > maxBatchImages {
+		return fmt.Errorf(
+			"config: %s: value %d must be in 1..%d",
+			envBatchMaxImages,
+			cfg.BatchMaxImages,
+			maxBatchImages,
+		)
+	}
+	if cfg.CacheEntries, err = intFromEnv(getenv, envCacheEntries, cfg.CacheEntries); err != nil {
+		return err
+	}
+	if cfg.CacheEntries < 0 || cfg.CacheEntries > maxCacheEntries {
+		return fmt.Errorf(
+			"config: %s: value %d must be in 0..%d",
+			envCacheEntries,
+			cfg.CacheEntries,
+			maxCacheEntries,
+		)
+	}
+	return nil
 }
 
 func appEnvFromEnv(getenv func(string) string, def string) (string, error) {

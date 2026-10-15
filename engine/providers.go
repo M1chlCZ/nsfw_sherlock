@@ -8,6 +8,8 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
+const deviceIDOption = "device_id"
+
 func newSessionOptions(provider string, deviceID int) (*ort.SessionOptions, error) {
 	if deviceID < 0 || deviceID > math.MaxInt32 {
 		return nil, fmt.Errorf("engine: GPU device ID must be in 0..%d", math.MaxInt32)
@@ -29,9 +31,9 @@ func newSessionOptions(provider string, deviceID int) (*ort.SessionOptions, erro
 	case "tensorrt":
 		err = appendTensorRT(options, deviceID)
 	case "openvino":
-		err = options.AppendExecutionProviderOpenVINO(map[string]string{"device_id": strconv.Itoa(deviceID)})
+		err = options.AppendExecutionProviderOpenVINO(map[string]string{deviceIDOption: strconv.Itoa(deviceID)})
 	default:
-		err = options.AppendExecutionProvider("MIGraphX", map[string]string{"device_id": strconv.Itoa(deviceID)})
+		err = options.AppendExecutionProvider("MIGraphX", map[string]string{deviceIDOption: strconv.Itoa(deviceID)})
 	}
 	if err != nil {
 		_ = options.Destroy()
@@ -52,7 +54,7 @@ func appendCUDA(options *ort.SessionOptions, deviceID int) error {
 		return err
 	}
 	defer func() { _ = cuda.Destroy() }()
-	if err := cuda.Update(map[string]string{"device_id": strconv.Itoa(deviceID)}); err != nil {
+	if err := cuda.Update(map[string]string{deviceIDOption: strconv.Itoa(deviceID)}); err != nil {
 		return err
 	}
 	return options.AppendExecutionProviderCUDA(cuda)
@@ -64,7 +66,7 @@ func appendTensorRT(options *ort.SessionOptions, deviceID int) error {
 		return err
 	}
 	defer func() { _ = trt.Destroy() }()
-	if err := trt.Update(map[string]string{"device_id": strconv.Itoa(deviceID)}); err != nil {
+	if err := trt.Update(map[string]string{deviceIDOption: strconv.Itoa(deviceID)}); err != nil {
 		return err
 	}
 	return options.AppendExecutionProviderTensorRT(trt)

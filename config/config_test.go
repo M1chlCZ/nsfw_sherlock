@@ -25,6 +25,7 @@ func wantDefaults() Config {
 		MaxImagePixels:  50_000_000,
 		SessionPoolSize: 2,
 		BatchMaxImages:  4,
+		CacheEntries:    0,
 		LogLevel:        "info",
 		LogFormat:       "text",
 	}
@@ -288,6 +289,28 @@ func TestLoadBatchMaxImages(t *testing.T) {
 	for _, value := range []string{"0", "65", "invalid"} {
 		if _, err := Load(getenvFrom(map[string]string{"BATCH_MAX_IMAGES": value})); err == nil {
 			t.Errorf("Load(BATCH_MAX_IMAGES=%s) accepted an invalid value", value)
+		}
+	}
+}
+
+func TestLoadCacheEntries(t *testing.T) {
+	cfg, err := Load(getenvFrom(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CacheEntries != 0 {
+		t.Fatalf("default CacheEntries = %d, want 0", cfg.CacheEntries)
+	}
+	cfg, err = Load(getenvFrom(map[string]string{"CACHE_ENTRIES": "500"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CacheEntries != 500 {
+		t.Fatalf("CacheEntries = %d, want 500", cfg.CacheEntries)
+	}
+	for _, value := range []string{"-1", "100001", "invalid"} {
+		if _, err := Load(getenvFrom(map[string]string{"CACHE_ENTRIES": value})); err == nil {
+			t.Errorf("Load(CACHE_ENTRIES=%s) accepted an invalid value", value)
 		}
 	}
 }

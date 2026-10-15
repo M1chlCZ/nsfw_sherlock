@@ -1263,3 +1263,74 @@ func TestBatchBodyLimit(t *testing.T) {
 		t.Errorf("batchBodyLimit(%d, 64) = %d, want saturation at %d", math.MaxInt32, got, math.MaxInt32)
 	}
 }
+
+func TestPicCacheServesRepeatedImages(t *testing.T) {
+	image := []byte("fake-image-bytes")
+	payload := base64.StdEncoding.EncodeToString(image)
+	analyzer := &fakeAnalyzer{analysis: engine.Analysis{Labels: engine.Labels{Porn: 0.9}}}
+	app := NewApp(
+		config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 4, CacheEntries: 8},
+		analyzer,
+		func(context.Context, []byte) (bool, error) { return true, nil },
+		testLogger(),
+	)
+
+	status, first := postPic(t, app, "/pic/check", payload, "a.png")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", status, first)
+	}
+	status, second := postPic(t, app, "/pic/check", payload, "b.png")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", status, second)
+	}
+	if !bytes.Equal(first, second) {
+		t.Errorf("cached response differs:\nfirst:  %s\nsecond: %s", first, second)
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 1 {
+		t.Errorf("Analyze calls = %d, want 1", calls)
+	}
+
+	status, _ = postPic(t, app, "/pic/labels", payload, "a.png")
+	if status != http.StatusOK {
+		t.Fatalf("labels status = %d, want 200", status)
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 2 {
+		t.Errorf("Analyze calls = %d, want 2; the cache must not mix endpoints", calls)
+	}
+}
+
+func TestPicBatchUsesTheCache(t *testing.T) {
+	image := []byte("fake-image-bytes")
+	payload := base64.StdEncoding.EncodeToString(image)
+	analyzer := &fakeAnalyzer{analysis: engine.Analysis{Labels: engine.Labels{Neutral: 0.9}}}
+	app := NewApp(
+		config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 4, CacheEntries: 8},
+		analyzer,
+		func(context.Context, []byte) (bool, error) { return false, nil },
+		testLogger(),
+	)
+
+	status, _ := postPic(t, app, "/pic/check", payload, "a.png")
+	if status != http.StatusOK {
+		t.Fatalf("check status = %d, want 200", status)
+	}
+	req, err := json.Marshal(batchRequest{Images: []picRequest{{Base64: payload}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, body := doRequest(t, app, http.MethodPost, "/pic/batch", string(req))
+	if status != http.StatusOK {
+		t.Fatalf("batch status = %d, want 200; body: %s", status, body)
+	}
+	results, ok := decodeJSON(t, body)["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %v, want 1 item", decodeJSON(t, body)["results"])
+	}
+	item, ok := results[0].(map[string]any)
+	if !ok || item["status"] != "ok" {
+		t.Fatalf("results[0] = %v, want an ok result", results[0])
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 1 {
+		t.Errorf("Analyze calls = %d, want 1; the batch must use the cached result", calls)
+	}
+}

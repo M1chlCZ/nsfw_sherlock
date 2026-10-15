@@ -83,6 +83,8 @@ The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns `
 Each result is a `/pic/check` body or the error body.
 The default limit is 4 images.
 
+When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
+
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
 The [service definition](proto/nsfw.proto) contains the request and response types.
 
@@ -152,6 +154,7 @@ Unsupported operators can still use the CPU.
 | `MAX_IMAGE_PIXELS` | `50000000` | Maximum decoded pixel count |
 | `SESSION_POOL_SIZE` | `2` | Sessions per model |
 | `BATCH_MAX_IMAGES` | `4` | Images per `/pic/batch` request (1..64). Raises the request body limit. |
+| `CACHE_ENTRIES` | `0` | Stored responses for identical image bytes. `0` disables the cache. |
 | `NSFW_ALLOW_DEGRADED` | `false` | Allow startup after a required model fails to load. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `LOG_FORMAT` | `text` | `text` or `json` |

@@ -69,6 +69,8 @@ The full analysis includes a `verdict` (`sfw`, `suggestive`, or `explicit`) and 
 
 The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns one `/pic/check` result per image in `results`.
 
+When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
+
 Errors use this shape:
 
 ```json
@@ -130,6 +132,7 @@ If the selected provider is unavailable, the service stops at startup. Unsupport
 | `MAX_IMAGE_PIXELS` | `50000000` | Maximum decoded pixel count |
 | `SESSION_POOL_SIZE` | `2` | Sessions per model |
 | `BATCH_MAX_IMAGES` | `4` | Images per `/pic/batch` request (1..64). Raises the request body limit. |
+| `CACHE_ENTRIES` | `0` | Stored responses for identical image bytes. `0` disables the cache. |
 | `NSFW_ALLOW_DEGRADED` | `false` | Allow startup after a required model fails to load. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `LOG_FORMAT` | `text` | `text` or `json` |
