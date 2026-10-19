@@ -38,6 +38,7 @@ func videoApp(analyzer Analyzer, extractor video.Extractor) *fiber.App {
 		analyzer:    analyzer,
 		timeout:     time.Second,
 		batchMax:    4,
+		metrics:     newMetricsState(nil),
 		video:       extractor,
 		videoLimits: video.Limits{FPS: 2, MaxFrames: 8, MaxWidth: videoMaxWidth},
 	}
@@ -47,10 +48,20 @@ func videoApp(analyzer Analyzer, extractor video.Extractor) *fiber.App {
 	return app
 }
 
-func multipartVideoRequest(t *testing.T, data []byte, withFile bool) *http.Request {
+func multipartVideoRequest(
+	t *testing.T,
+	data []byte,
+	fields map[string]string,
+	withFile bool,
+) *http.Request {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if withFile {
 		part, err := writer.CreateFormFile("file", "clip.mp4")
 		if err != nil {
@@ -88,7 +99,7 @@ func TestVideoCheckSummarizesFrames(t *testing.T) {
 		{Index: 3, TimeMs: 1000, Data: []byte("suggestive")},
 	}}
 	app := videoApp(frameAnalyzer(), extractor)
-	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), true))
+	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), nil, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,18 +134,55 @@ func TestVideoCheckSummarizesFrames(t *testing.T) {
 	}
 }
 
+func TestVideoCheckPassesSensitivity(t *testing.T) {
+	analyzer := frameAnalyzer()
+	app := videoApp(analyzer, &fakeExtractor{frames: []video.Frame{{Index: 1, Data: []byte("sfw")}}})
+	status, body, err := send(app, multipartVideoRequest(
+		t,
+		[]byte("video-bytes"),
+		map[string]string{"sensitivity": "2"},
+		true,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", status, body)
+	}
+	if options := analyzer.lastOptions(); options.Sensitivity != 2 {
+		t.Errorf("sensitivity = %v, want 2", options.Sensitivity)
+	}
+}
+
+func TestVideoCheckValidatesSensitivity(t *testing.T) {
+	app := videoApp(frameAnalyzer(), &fakeExtractor{})
+	status, body, err := send(app, multipartVideoRequest(
+		t,
+		[]byte("video-bytes"),
+		map[string]string{"sensitivity": "0.05"},
+		true,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", status, body)
+	}
+}
+
 func TestVideoCheckRejectsOversizedUploads(t *testing.T) {
 	h := &handlers{
 		analyzer:      frameAnalyzer(),
 		timeout:       time.Second,
 		batchMax:      4,
+		metrics:       newMetricsState(nil),
 		video:         &fakeExtractor{},
 		videoLimits:   video.Limits{FPS: 2, MaxFrames: 8, MaxWidth: videoMaxWidth},
 		videoMaxBytes: 4,
 	}
 	app := fiber.New()
 	app.Post("/video/check", h.videoCheck)
-	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), true))
+	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), nil, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +193,7 @@ func TestVideoCheckRejectsOversizedUploads(t *testing.T) {
 
 func TestVideoCheckRequiresAFile(t *testing.T) {
 	app := videoApp(frameAnalyzer(), &fakeExtractor{})
-	status, body, err := send(app, multipartVideoRequest(t, nil, false))
+	status, body, err := send(app, multipartVideoRequest(t, nil, nil, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +208,7 @@ func TestVideoCheckRequiresAFile(t *testing.T) {
 
 func TestVideoCheckReportsMissingFFmpeg(t *testing.T) {
 	app := videoApp(frameAnalyzer(), &fakeExtractor{err: video.ErrFFmpegMissing})
-	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), true))
+	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), nil, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +221,7 @@ func TestVideoCheckUsesTheAnalyzerError(t *testing.T) {
 	analyzer := &fakeAnalyzer{err: engine.ErrUnsupportedImage}
 	extractor := &fakeExtractor{frames: []video.Frame{{Index: 1, Data: []byte("frame")}}}
 	app := videoApp(analyzer, extractor)
-	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), true))
+	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), nil, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +233,11 @@ func TestVideoCheckUsesTheAnalyzerError(t *testing.T) {
 func TestPicUploadAnalyzesTheRawBody(t *testing.T) {
 	analyzer := &fakeAnalyzer{analysis: engine.Analysis{Labels: engine.Labels{Porn: 0.9}}}
 	app := videoApp(analyzer, &fakeExtractor{})
-	req := httptest.NewRequest(http.MethodPost, "/pic/upload", bytes.NewReader([]byte("image")))
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/pic/upload?sensitivity=2",
+		bytes.NewReader([]byte("image")),
+	)
 	req.Header.Set("Content-Type", "image/png")
 	status, body, err := send(app, req)
 	if err != nil {
@@ -198,8 +250,8 @@ func TestPicUploadAnalyzesTheRawBody(t *testing.T) {
 	if fields["nsfwPic"] != true || fields["status"] != "ok" {
 		t.Errorf("body = %v", fields)
 	}
-	if calls, _, _ := analyzer.snapshot(); calls != 1 {
-		t.Errorf("Analyze calls = %d, want 1", calls)
+	if options := analyzer.lastOptions(); options.Sensitivity != 2 {
+		t.Errorf("sensitivity = %v, want 2", options.Sensitivity)
 	}
 }
 
@@ -212,6 +264,21 @@ func TestPicUploadRejectsAnEmptyBody(t *testing.T) {
 	}
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", status, body)
+	}
+}
+
+func TestSensitivityFromString(t *testing.T) {
+	if value, ok := sensitivityFromString(""); !ok || value != 0 {
+		t.Errorf("empty = %v, %v", value, ok)
+	}
+	if value, ok := sensitivityFromString("2.5"); !ok || value != 2.5 {
+		t.Errorf("2.5 = %v, %v", value, ok)
+	}
+	if _, ok := sensitivityFromString("0.05"); ok {
+		t.Errorf("0.05 accepted")
+	}
+	if _, ok := sensitivityFromString("fast"); ok {
+		t.Errorf("text accepted")
 	}
 }
 
