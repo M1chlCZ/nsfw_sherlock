@@ -14,6 +14,7 @@ import (
 	"nsfw_sherlock/config"
 	"nsfw_sherlock/engine"
 	"nsfw_sherlock/internal/ocrguard"
+	"nsfw_sherlock/internal/video"
 	"nsfw_sherlock/utils"
 
 	"github.com/gofiber/fiber/v3"
@@ -47,11 +48,13 @@ type Analyzer interface {
 type TextChecker func(ctx context.Context, img []byte) (bool, error)
 
 type handlers struct {
-	analyzer Analyzer
-	checker  TextChecker
-	timeout  time.Duration
-	batchMax int
-	cache    *responseCache
+	analyzer    Analyzer
+	checker     TextChecker
+	timeout     time.Duration
+	batchMax    int
+	cache       *responseCache
+	video       video.Extractor
+	videoLimits video.Limits
 }
 
 // NewApp builds the HTTP application with the legacy routes and middleware.
@@ -78,16 +81,26 @@ func newApp(
 		checker:  ocrguard.Guard(checker, ocrConcurrency, ocrTimeout),
 		timeout:  analyzeTimeout,
 		batchMax: max(cfg.BatchMaxImages, 1),
+		video:    video.New(cfg.FFmpegPath),
+		videoLimits: video.Limits{
+			FPS:       cfg.VideoSampleFPS,
+			MaxFrames: cfg.VideoMaxFrames,
+			MaxWidth:  videoMaxWidth,
+		},
 	}
 	if cfg.CacheEntries > 0 {
 		h.cache = newResponseCache(cfg.CacheEntries)
 	}
 	limit := concurrencyLimiter(make(chan struct{}, requestConcurrency))
+	bodyLimit := batchBodyLimit(cfg.MaxImageBytes, h.batchMax)
+	if videoLimit := int(cfg.VideoMaxBytes) + bodyLimitOverhead; videoLimit > bodyLimit {
+		bodyLimit = videoLimit
+	}
 
 	app := fiber.New(fiber.Config{
 		AppName:       "NSFW Detector API",
 		StrictRouting: false,
-		BodyLimit:     batchBodyLimit(cfg.MaxImageBytes, h.batchMax),
+		BodyLimit:     bodyLimit,
 		ReadTimeout:   serverTimeout,
 		WriteTimeout:  serverTimeout,
 		IdleTimeout:   serverTimeout,
@@ -104,6 +117,8 @@ func newApp(
 	app.Post("/pic/labels", limit, h.picLabels)
 	app.Post("/pic/analyze", limit, h.picAnalyze)
 	app.Post("/pic/batch", limit, h.picBatch)
+	app.Post("/pic/upload", limit, h.picUpload)
+	app.Post("/video/check", limit, h.videoCheck)
 	return app
 }
 

@@ -26,6 +26,10 @@ func wantDefaults() Config {
 		SessionPoolSize: 2,
 		BatchMaxImages:  4,
 		CacheEntries:    0,
+		FFmpegPath:      "ffmpeg",
+		VideoSampleFPS:  1,
+		VideoMaxFrames:  24,
+		VideoMaxBytes:   64 << 20,
 		LogLevel:        "info",
 		LogFormat:       "text",
 	}
@@ -328,5 +332,40 @@ func TestLoadGPUConfig(t *testing.T) {
 		if cfg.ORTProvider != want || cfg.ORTDeviceID != 2 {
 			t.Fatalf("Load(%s) = %+v", provider, cfg)
 		}
+	}
+}
+
+func TestVideoSettings(t *testing.T) {
+	cfg, err := Load(getenvFrom(map[string]string{
+		envFFmpegPath:     "/opt/ffmpeg",
+		envVideoSampleFPS: "2.5",
+		envVideoMaxFrames: "12",
+		envVideoMaxBytes:  "1048576",
+	}))
+	if err != nil {
+		t.Fatalf("Load() returned error %v, want nil", err)
+	}
+	if cfg.FFmpegPath != "/opt/ffmpeg" || cfg.VideoSampleFPS != 2.5 ||
+		cfg.VideoMaxFrames != 12 || cfg.VideoMaxBytes != 1048576 {
+		t.Fatalf("video settings = %+v", cfg)
+	}
+}
+
+func TestVideoSettingsRejectInvalidValues(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"fps text":    {envVideoSampleFPS: "fast"},
+		"fps zero":    {envVideoSampleFPS: "0"},
+		"fps high":    {envVideoSampleFPS: "31"},
+		"frames text": {envVideoMaxFrames: "many"},
+		"frames zero": {envVideoMaxFrames: "0"},
+		"frames high": {envVideoMaxFrames: "241"},
+		"bytes text":  {envVideoMaxBytes: "big"},
+		"bytes zero":  {envVideoMaxBytes: "0"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Load(getenvFrom(env)); err == nil {
+				t.Fatalf("Load() returned no error for %v", env)
+			}
+		})
 	}
 }
