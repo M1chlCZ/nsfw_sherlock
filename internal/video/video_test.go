@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -76,5 +77,31 @@ func TestNormalizeFillsDefaults(t *testing.T) {
 	limits := normalize(Limits{})
 	if limits.FPS != 1 || limits.MaxFrames != 24 || limits.MaxWidth != 1280 {
 		t.Fatalf("normalize = %+v", limits)
+	}
+}
+
+func TestExtractRunsRealFFmpeg(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	clip := filepath.Join(t.TempDir(), "clip.mp4")
+	command := exec.Command(ffmpeg, "-v", "error", "-f", "lavfi", "-i",
+		"testsrc=duration=2:size=320x240:rate=5", "-pix_fmt", "yuv420p", clip)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("create clip: %v: %s", err, output)
+	}
+	frames, err := New(ffmpeg).Extract(context.Background(), clip, Limits{FPS: 1, MaxFrames: 4})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if len(frames) == 0 || len(frames) > 4 {
+		t.Fatalf("frames = %d, want 1..4", len(frames))
+	}
+	if len(frames[0].Data) == 0 {
+		t.Fatal("the first frame is empty")
+	}
+	if frames[0].TimeMs != 0 {
+		t.Fatalf("first frame time = %d, want 0", frames[0].TimeMs)
 	}
 }
