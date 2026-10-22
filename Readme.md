@@ -69,6 +69,8 @@ All image endpoints accept this JSON request:
 | `POST /pic/labels` | Probabilities for `drawings`, `hentai`, `neutral`, `porn`, and `sexy` |
 | `POST /pic/analyze` | Full analysis, model scores, region detections, and elapsed time |
 | `POST /pic/batch` | One `/pic/check` result per image, up to `BATCH_MAX_IMAGES` |
+| `POST /pic/upload` | Raw image bytes as the request body; the same body as `/pic/check` |
+| `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
 
 Example response from `/pic/check`:
 
@@ -84,6 +86,23 @@ Each result is a `/pic/check` body or the error body.
 The default limit is 4 images.
 
 When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
+
+### Video scanning
+
+`POST /video/check` accepts a multipart form with the video in the `file`
+field. The service samples frames with ffmpeg (`VIDEO_SAMPLE_FPS`, default 1
+frame per second, at most `VIDEO_MAX_FRAMES`, default 24), analyzes each frame,
+and returns the worst verdict:
+
+```sh
+curl -fsS -F "file=@clip.mp4" http://localhost:4000/video/check
+```
+
+The response holds `summary` (verdict, maximum NSFW score, frame counts and
+elapsed time) and `frames`, with one analysis per sampled frame. Install
+ffmpeg on the host, or use the Docker image, which includes it. Without ffmpeg
+the endpoint answers 503. Uploads are limited to `VIDEO_MAX_BYTES` and the
+whole scan stops after 120 seconds.
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
 The [service definition](proto/nsfw.proto) contains the request and response types.
@@ -155,6 +174,10 @@ Unsupported operators can still use the CPU.
 | `SESSION_POOL_SIZE` | `2` | Sessions per model |
 | `BATCH_MAX_IMAGES` | `4` | Images per `/pic/batch` request (1..64). Raises the request body limit. |
 | `CACHE_ENTRIES` | `0` | Stored responses for identical image bytes. `0` disables the cache. |
+| `FFMPEG_PATH` | `ffmpeg` | ffmpeg binary used by `/video/check` |
+| `VIDEO_SAMPLE_FPS` | `1` | Frames sampled per second (0.1..30) |
+| `VIDEO_MAX_FRAMES` | `24` | Frame cap per video (1..240) |
+| `VIDEO_MAX_BYTES` | `67108864` (64 MiB) | Maximum video upload |
 | `NSFW_ALLOW_DEGRADED` | `false` | Allow startup after a required model fails to load. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `LOG_FORMAT` | `text` | `text` or `json` |

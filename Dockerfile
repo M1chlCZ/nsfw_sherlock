@@ -45,7 +45,7 @@ ARG ORT_SHA256_CUDA12=4ca594a0da83927befbd73fe020d7f569be151d70bb4fe9741ad405f48
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl libtesseract5 liblept5 tesseract-ocr tesseract-ocr-eng \
+        ca-certificates curl ffmpeg libtesseract5 liblept5 tesseract-ocr tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
