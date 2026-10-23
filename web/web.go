@@ -48,13 +48,14 @@ type Analyzer interface {
 type TextChecker func(ctx context.Context, img []byte) (bool, error)
 
 type handlers struct {
-	analyzer    Analyzer
-	checker     TextChecker
-	timeout     time.Duration
-	batchMax    int
-	cache       *responseCache
-	video       video.Extractor
-	videoLimits video.Limits
+	analyzer      Analyzer
+	checker       TextChecker
+	timeout       time.Duration
+	batchMax      int
+	cache         *responseCache
+	video         video.Extractor
+	videoLimits   video.Limits
+	videoMaxBytes int64
 }
 
 // NewApp builds the HTTP application with the legacy routes and middleware.
@@ -87,6 +88,7 @@ func newApp(
 			MaxFrames: cfg.VideoMaxFrames,
 			MaxWidth:  videoMaxWidth,
 		},
+		videoMaxBytes: cfg.VideoMaxBytes,
 	}
 	if cfg.CacheEntries > 0 {
 		h.cache = newResponseCache(cfg.CacheEntries)

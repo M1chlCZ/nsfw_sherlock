@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
+	"mime/multipart"
 	"os"
 	"time"
 
@@ -58,6 +60,9 @@ func (h *handlers) videoCheck(c fiber.Ctx) error {
 	file, err := c.FormFile("file")
 	if err != nil {
 		return utils.ReportError(c, videoNoFile, fiber.StatusBadRequest)
+	}
+	if err := h.rejectOversizedVideo(c, file); err != nil {
+		return err
 	}
 	input, err := os.CreateTemp("", "nsfw-video-*")
 	if err != nil {
@@ -133,6 +138,21 @@ func (h *handlers) picUpload(c fiber.Ctx) error {
 		NSFWText: nsfwText,
 		NSFWPic:  analysis.LegacyNSFW(),
 	})
+}
+
+func (h *handlers) rejectOversizedVideo(
+	c fiber.Ctx,
+	file *multipart.FileHeader,
+) error {
+	limit := h.videoMaxBytes
+	if limit <= 0 || file.Size <= limit {
+		return nil
+	}
+	return utils.ReportError(
+		c,
+		fmt.Sprintf("the video exceeds the %d MiB limit", limit>>20),
+		fiber.StatusRequestEntityTooLarge,
+	)
 }
 
 func summarizeVideo(frames []videoFrame, elapsed time.Duration) videoSummary {

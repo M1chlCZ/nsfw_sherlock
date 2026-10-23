@@ -123,6 +123,26 @@ func TestVideoCheckSummarizesFrames(t *testing.T) {
 	}
 }
 
+func TestVideoCheckRejectsOversizedUploads(t *testing.T) {
+	h := &handlers{
+		analyzer:      frameAnalyzer(),
+		timeout:       time.Second,
+		batchMax:      4,
+		video:         &fakeExtractor{},
+		videoLimits:   video.Limits{FPS: 2, MaxFrames: 8, MaxWidth: videoMaxWidth},
+		videoMaxBytes: 4,
+	}
+	app := fiber.New()
+	app.Post("/video/check", h.videoCheck)
+	status, body, err := send(app, multipartVideoRequest(t, []byte("video-bytes"), true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413; body: %s", status, body)
+	}
+}
+
 func TestVideoCheckRequiresAFile(t *testing.T) {
 	app := videoApp(frameAnalyzer(), &fakeExtractor{})
 	status, body, err := send(app, multipartVideoRequest(t, nil, false))
