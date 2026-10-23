@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,11 +14,13 @@ import (
 	"nsfw_sherlock/config"
 	"nsfw_sherlock/engine"
 	"nsfw_sherlock/internal/ocrguard"
+	"nsfw_sherlock/internal/video"
 	"nsfw_sherlock/utils"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v3/middleware/recover"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -45,9 +48,14 @@ type Analyzer interface {
 type TextChecker func(ctx context.Context, img []byte) (bool, error)
 
 type handlers struct {
-	analyzer Analyzer
-	checker  TextChecker
-	timeout  time.Duration
+	analyzer      Analyzer
+	checker       TextChecker
+	timeout       time.Duration
+	batchMax      int
+	cache         *responseCache
+	video         video.Extractor
+	videoLimits   video.Limits
+	videoMaxBytes int64
 }
 
 // NewApp builds the HTTP application with the legacy routes and middleware.
@@ -73,13 +81,28 @@ func newApp(
 		analyzer: analyzer,
 		checker:  ocrguard.Guard(checker, ocrConcurrency, ocrTimeout),
 		timeout:  analyzeTimeout,
+		batchMax: max(cfg.BatchMaxImages, 1),
+		video:    video.New(cfg.FFmpegPath),
+		videoLimits: video.Limits{
+			FPS:       cfg.VideoSampleFPS,
+			MaxFrames: cfg.VideoMaxFrames,
+			MaxWidth:  videoMaxWidth,
+		},
+		videoMaxBytes: cfg.VideoMaxBytes,
+	}
+	if cfg.CacheEntries > 0 {
+		h.cache = newResponseCache(cfg.CacheEntries)
 	}
 	limit := concurrencyLimiter(make(chan struct{}, requestConcurrency))
+	bodyLimit := batchBodyLimit(cfg.MaxImageBytes, h.batchMax)
+	if videoLimit := int(cfg.VideoMaxBytes) + bodyLimitOverhead; videoLimit > bodyLimit {
+		bodyLimit = videoLimit
+	}
 
 	app := fiber.New(fiber.Config{
 		AppName:       "NSFW Detector API",
 		StrictRouting: false,
-		BodyLimit:     bodyLimitFor(cfg.MaxImageBytes),
+		BodyLimit:     bodyLimit,
 		ReadTimeout:   serverTimeout,
 		WriteTimeout:  serverTimeout,
 		IdleTimeout:   serverTimeout,
@@ -95,6 +118,9 @@ func newApp(
 	app.Post("/pic/check", limit, h.picCheck)
 	app.Post("/pic/labels", limit, h.picLabels)
 	app.Post("/pic/analyze", limit, h.picAnalyze)
+	app.Post("/pic/batch", limit, h.picBatch)
+	app.Post("/pic/upload", limit, h.picUpload)
+	app.Post("/video/check", limit, h.videoCheck)
 	return app
 }
 
@@ -178,87 +204,184 @@ type analyzeResponse struct {
 }
 
 func (h *handlers) picCheck(c fiber.Ctx) error {
-	analysis, data, ok := h.analyze(c)
+	return h.picAnalysis(c, "/pic/check", func(analysis engine.Analysis, nsfwText bool) any {
+		return checkResponse{
+			Status:   "ok",
+			Message:  successMessage,
+			NSFWText: nsfwText,
+			NSFWPic:  analysis.LegacyNSFW(),
+		}
+	})
+}
+
+func (h *handlers) picLabels(c fiber.Ctx) error {
+	return h.picAnalysis(c, "/pic/labels", func(analysis engine.Analysis, nsfwText bool) any {
+		return labelsResponse{
+			Status:   "ok",
+			Message:  successMessage,
+			Drawings: analysis.Labels.Drawings,
+			Hentai:   analysis.Labels.Hentai,
+			Neutral:  analysis.Labels.Neutral,
+			Porn:     analysis.Labels.Porn,
+			Sexy:     analysis.Labels.Sexy,
+			NSFWText: nsfwText,
+		}
+	})
+}
+
+func (h *handlers) picAnalyze(c fiber.Ctx) error {
+	return h.picAnalysis(c, "/pic/analyze", func(analysis engine.Analysis, nsfwText bool) any {
+		return analyzeResponse{
+			Status:   "ok",
+			Message:  successMessage,
+			NSFWText: nsfwText,
+			Analysis: analysis,
+		}
+	})
+}
+
+func (h *handlers) picAnalysis(c fiber.Ctx, endpoint string, build func(engine.Analysis, bool) any) error {
+	data, ok := h.picData(c)
 	if !ok {
 		return nil
+	}
+	key := cacheKey(endpoint, data)
+	if h.cache != nil {
+		if body, hit := h.cache.get(key); hit {
+			return sendCachedJSON(c, body)
+		}
+	}
+	analysis, err := h.analyzeData(c.Context(), data)
+	if err != nil {
+		return utils.ReportError(c, err.Error(), analyzeErrorStatus(err))
 	}
 	nsfwText, err := h.textNSFW(c.Context(), data)
 	if err != nil {
 		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
 	}
-	return c.JSON(checkResponse{
+	return h.sendJSON(c, key, build(analysis, nsfwText))
+}
+
+func (h *handlers) analyzeData(ctx context.Context, data []byte) (engine.Analysis, error) {
+	ctx, cancel := context.WithTimeout(ctx, h.timeout)
+	defer cancel()
+	analysis, err := h.analyzer.Analyze(ctx, data)
+	if err != nil {
+		return engine.Analysis{}, err
+	}
+	if analysis.Detections == nil {
+		analysis.Detections = []engine.Detection{}
+	}
+	return analysis, nil
+}
+
+func (h *handlers) sendJSON(c fiber.Ctx, key string, value any) error {
+	body, err := json.Marshal(value)
+	if err != nil {
+		return utils.ReportError(c, "internal error", fiber.StatusInternalServerError)
+	}
+	if h.cache != nil {
+		h.cache.put(key, body)
+	}
+	return sendCachedJSON(c, body)
+}
+
+func sendCachedJSON(c fiber.Ctx, body []byte) error {
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	return c.Send(body)
+}
+
+func (h *handlers) picData(c fiber.Ctx) ([]byte, bool) {
+	var req picRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+		return nil, false
+	}
+	if req.Base64 == "" {
+		_ = utils.ReportError(c, "Bad Request", fiber.StatusBadRequest)
+		return nil, false
+	}
+	data, err := utils.DecodePayload(req.Base64)
+	if err != nil {
+		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+		return nil, false
+	}
+	return data, true
+}
+
+type batchRequest struct {
+	Images []picRequest `json:"images"`
+}
+
+type batchResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Results []any  `json:"results"`
+}
+
+func (h *handlers) picBatch(c fiber.Ctx) error {
+	var req batchRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+	}
+	if len(req.Images) == 0 {
+		return utils.ReportError(c, "no images in the batch", fiber.StatusBadRequest)
+	}
+	if len(req.Images) > h.batchMax {
+		return utils.ReportError(
+			c,
+			fmt.Sprintf("the batch limit is %d images", h.batchMax),
+			fiber.StatusBadRequest,
+		)
+	}
+	results := make([]any, len(req.Images))
+	g, gctx := errgroup.WithContext(c.Context())
+	g.SetLimit(min(h.batchMax, requestConcurrency))
+	for i := range req.Images {
+		g.Go(func() error {
+			results[i] = h.checkOne(gctx, req.Images[i])
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return c.JSON(batchResponse{Status: "ok", Message: successMessage, Results: results})
+}
+
+func (h *handlers) checkOne(ctx context.Context, req picRequest) any {
+	if req.Base64 == "" {
+		return utils.ErrorResult("Bad Request")
+	}
+	data, err := utils.DecodePayload(req.Base64)
+	if err != nil {
+		return utils.ErrorResult(err.Error())
+	}
+	key := cacheKey("/pic/check", data)
+	if h.cache != nil {
+		if body, hit := h.cache.get(key); hit {
+			return json.RawMessage(body)
+		}
+	}
+	analysis, err := h.analyzeData(ctx, data)
+	if err != nil {
+		return utils.ErrorResult(err.Error())
+	}
+	nsfwText, err := h.textNSFW(ctx, data)
+	if err != nil {
+		return utils.ErrorResult(err.Error())
+	}
+	body, err := json.Marshal(checkResponse{
 		Status:   "ok",
 		Message:  successMessage,
 		NSFWText: nsfwText,
 		NSFWPic:  analysis.LegacyNSFW(),
 	})
-}
-
-func (h *handlers) picLabels(c fiber.Ctx) error {
-	analysis, data, ok := h.analyze(c)
-	if !ok {
-		return nil
-	}
-	nsfwText, err := h.textNSFW(c.Context(), data)
 	if err != nil {
-		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
+		return utils.ErrorResult("internal error")
 	}
-	return c.JSON(labelsResponse{
-		Status:   "ok",
-		Message:  successMessage,
-		Drawings: analysis.Labels.Drawings,
-		Hentai:   analysis.Labels.Hentai,
-		Neutral:  analysis.Labels.Neutral,
-		Porn:     analysis.Labels.Porn,
-		Sexy:     analysis.Labels.Sexy,
-		NSFWText: nsfwText,
-	})
-}
-
-func (h *handlers) picAnalyze(c fiber.Ctx) error {
-	analysis, data, ok := h.analyze(c)
-	if !ok {
-		return nil
+	if h.cache != nil {
+		h.cache.put(key, body)
 	}
-	nsfwText, err := h.textNSFW(c.Context(), data)
-	if err != nil {
-		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
-	}
-	return c.JSON(analyzeResponse{
-		Status:   "ok",
-		Message:  successMessage,
-		NSFWText: nsfwText,
-		Analysis: analysis,
-	})
-}
-
-func (h *handlers) analyze(c fiber.Ctx) (engine.Analysis, []byte, bool) {
-	var req picRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
-		return engine.Analysis{}, nil, false
-	}
-	if req.Base64 == "" {
-		_ = utils.ReportError(c, "Bad Request", fiber.StatusBadRequest)
-		return engine.Analysis{}, nil, false
-	}
-	data, err := utils.DecodePayload(req.Base64)
-	if err != nil {
-		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
-		return engine.Analysis{}, nil, false
-	}
-
-	ctx, cancel := context.WithTimeout(c.Context(), h.timeout)
-	defer cancel()
-	analysis, err := h.analyzer.Analyze(ctx, data)
-	if err != nil {
-		_ = utils.ReportError(c, err.Error(), analyzeErrorStatus(err))
-		return engine.Analysis{}, nil, false
-	}
-	if analysis.Detections == nil {
-		analysis.Detections = []engine.Detection{}
-	}
-	return analysis, data, true
+	return json.RawMessage(body)
 }
 
 func (h *handlers) textNSFW(ctx context.Context, data []byte) (bool, error) {
@@ -297,6 +420,18 @@ func bodyLimitFor(maxImageBytes int64) int {
 		return math.MaxInt32
 	}
 	return int(limit)
+}
+
+func batchBodyLimit(maxImageBytes int64, batchMax int) int {
+	single := int64(bodyLimitFor(maxImageBytes))
+	if batchMax < 1 {
+		batchMax = 1
+	}
+	scaled := single * int64(batchMax)
+	if scaled > math.MaxInt32 || scaled < single {
+		return math.MaxInt32
+	}
+	return int(scaled)
 }
 
 func requestContext(baseCtx context.Context) fiber.Handler {

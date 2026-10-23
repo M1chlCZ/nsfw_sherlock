@@ -68,6 +68,9 @@ All image endpoints accept this JSON request:
 | `POST /pic/check` | `nsfwPic` and `nsfwText` flags |
 | `POST /pic/labels` | Probabilities for `drawings`, `hentai`, `neutral`, `porn`, and `sexy` |
 | `POST /pic/analyze` | Full analysis, model scores, region detections, and elapsed time |
+| `POST /pic/batch` | One `/pic/check` result per image, up to `BATCH_MAX_IMAGES` |
+| `POST /pic/upload` | Raw image bytes as the request body; the same body as `/pic/check` |
+| `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
 
 Example response from `/pic/check`:
 
@@ -77,6 +80,29 @@ Example response from `/pic/check`:
 
 The full analysis includes a `verdict` (`sfw`, `suggestive`, or `explicit`) and an `nsfw` score.
 Errors use `{"errorMessage":"...","status":"FAIL","hasError":true}`.
+
+The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns `{"status":"ok","message":"success","results":[...]}`.
+Each result is a `/pic/check` body or the error body.
+The default limit is 4 images.
+
+When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
+
+### Video scanning
+
+`POST /video/check` accepts a multipart form with the video in the `file`
+field. The service samples frames with ffmpeg (`VIDEO_SAMPLE_FPS`, default 1
+frame per second, at most `VIDEO_MAX_FRAMES`, default 24), analyzes each frame,
+and returns the worst verdict:
+
+```sh
+curl -fsS -F "file=@clip.mp4" http://localhost:4000/video/check
+```
+
+The response holds `summary` (verdict, maximum NSFW score, frame counts and
+elapsed time) and `frames`, with one analysis per sampled frame. Install
+ffmpeg on the host, or use the Docker image, which includes it. Without ffmpeg
+the endpoint answers 503. Uploads are limited to `VIDEO_MAX_BYTES` and the
+whole scan stops after 120 seconds.
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
 The [service definition](proto/nsfw.proto) contains the request and response types.
@@ -89,7 +115,7 @@ Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Tool
 Then run the CUDA image:
 
 ```sh
-docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.0.5-cuda
+docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.1.0-cuda
 ```
 
 This image supports Linux amd64. It includes ONNX Runtime 1.29.0, CUDA 12, and cuDNN.
@@ -107,9 +133,21 @@ The `rocm` value is an alias for `migraphx`. The Go binding requires ORT API 29.
 Older runtimes are incompatible. This project does not publish an AMD image.
 The [MIGraphX guide](https://onnxruntime.ai/docs/build/eps.html#migraphx) describes the runtime build.
 
+### NVIDIA · TensorRT
+
+Use an ONNX Runtime shared library built with the TensorRT execution provider.
+Then set `ORT_PROVIDER=tensorrt`.
+TensorRT compiles each model for your GPU at the first run. This step is slow.
+
+### Intel · OpenVINO
+
+Use an ONNX Runtime shared library built with the OpenVINO execution provider.
+Then set `ORT_PROVIDER=openvino`.
+OpenVINO runs on an Intel CPU or GPU.
+
 If the selected provider is unavailable, the service stops at startup.
 Unsupported operators can still use the CPU.
-**GPU inference remains untested on physical NVIDIA or AMD hardware.**
+**The GPU execution providers remain untested on physical hardware.**
 
 ## Configuration
 
@@ -118,7 +156,7 @@ Unsupported operators can still use the CPU.
 | `APP_ENV` | `web` | HTTP (`web`) or gRPC (`grpc`). `http` is a deprecated alias. |
 | `PORT` | `4000` | Service port |
 | `NSFW_PROFILE` | `balanced` | Model profile |
-| `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, or `migraphx`. `rocm` aliases `migraphx`. |
+| `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, `migraphx`, `tensorrt`, or `openvino`. `rocm` aliases `migraphx`. |
 | `ORT_DEVICE_ID` | `0` | GPU index |
 | `OCR_ENABLED` | `true` | Text detection. Requires a build with OCR support. |
 
@@ -134,6 +172,12 @@ Unsupported operators can still use the CPU.
 | `MAX_IMAGE_BYTES` | `20971520` (20 MiB) | Maximum image size |
 | `MAX_IMAGE_PIXELS` | `50000000` | Maximum decoded pixel count |
 | `SESSION_POOL_SIZE` | `2` | Sessions per model |
+| `BATCH_MAX_IMAGES` | `4` | Images per `/pic/batch` request (1..64). Raises the request body limit. |
+| `CACHE_ENTRIES` | `0` | Stored responses for identical image bytes. `0` disables the cache. |
+| `FFMPEG_PATH` | `ffmpeg` | ffmpeg binary used by `/video/check` |
+| `VIDEO_SAMPLE_FPS` | `1` | Frames sampled per second (0.1..30) |
+| `VIDEO_MAX_FRAMES` | `24` | Frame cap per video (1..240) |
+| `VIDEO_MAX_BYTES` | `67108864` (64 MiB) | Maximum video upload |
 | `NSFW_ALLOW_DEGRADED` | `false` | Allow startup after a required model fails to load. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `LOG_FORMAT` | `text` | `text` or `json` |

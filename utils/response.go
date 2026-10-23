@@ -16,3 +16,12 @@ func ReportError(c fiber.Ctx, err string, statusCode int) error {
 		HasError:     true,
 	})
 }
+
+// ErrorResult builds the legacy error body for one failed batch item.
+func ErrorResult(err string) any {
+	return errorBody{
+		ErrorMessage: err,
+		Status:       "FAIL",
+		HasError:     true,
+	}
+}

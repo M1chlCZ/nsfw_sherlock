@@ -40,6 +40,9 @@ All image endpoints accept this JSON request:
 | `POST /pic/check` | `nsfwPic` and `nsfwText` flags |
 | `POST /pic/labels` | Probabilities for `drawings`, `hentai`, `neutral`, `porn`, and `sexy` |
 | `POST /pic/analyze` | Full analysis, model scores, region detections, and elapsed time |
+| `POST /pic/batch` | One `/pic/check` result per image, up to `BATCH_MAX_IMAGES` |
+| `POST /pic/upload` | Raw image bytes as the request body; the same body as `/pic/check` |
+| `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
 
 Example response from `/pic/check`:
 
@@ -66,6 +69,12 @@ Example response from `/pic/analyze`:
 
 The full analysis includes a `verdict` (`sfw`, `suggestive`, or `explicit`) and an `nsfw` score.
 
+The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns one `/pic/check` result per image in `results`.
+
+When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
+
+Send a video as a multipart `file` field to `/video/check`; the response holds one analysis per sampled frame and a summary. The image endpoints also accept raw bytes at `/pic/upload`. The Docker image includes ffmpeg.
+
 Errors use this shape:
 
 ```json
@@ -80,7 +89,7 @@ The [service definition](https://github.com/M1chlCZ/nsfw_sherlock/blob/main/prot
 ### NVIDIA · CUDA
 
 Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Toolkit.
-CUDA images are tagged with a `-cuda` suffix, for example `v1.0.5-cuda` and `latest-cuda`.
+CUDA images are tagged with a `-cuda` suffix, for example `v1.1.0-cuda` and `latest-cuda`.
 
 ```sh
 docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:latest-cuda
@@ -97,9 +106,17 @@ Keep the provider libraries beside it and add the ROCm dependencies to the libra
 
 The `rocm` value is an alias for `migraphx`. The Go binding requires ORT API 29, so older runtimes are incompatible. This project does not publish an AMD image.
 
+### NVIDIA · TensorRT
+
+Use an ONNX Runtime shared library built with the TensorRT execution provider, then set `ORT_PROVIDER=tensorrt`. TensorRT compiles each model for your GPU at the first run. This step is slow.
+
+### Intel · OpenVINO
+
+Use an ONNX Runtime shared library built with the OpenVINO execution provider, then set `ORT_PROVIDER=openvino`. OpenVINO runs on an Intel CPU or GPU.
+
 If the selected provider is unavailable, the service stops at startup. Unsupported operators can still use the CPU.
 
-**GPU inference remains untested on physical NVIDIA or AMD hardware.**
+**The GPU execution providers remain untested on physical hardware.**
 
 ## Configuration
 
@@ -108,7 +125,7 @@ If the selected provider is unavailable, the service stops at startup. Unsupport
 | `APP_ENV` | `web` | HTTP (`web`) or gRPC (`grpc`). `http` is a deprecated alias. |
 | `PORT` | `4000` | Service port |
 | `NSFW_PROFILE` | `balanced` | Model profile |
-| `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, or `migraphx`. `rocm` aliases `migraphx`. |
+| `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, `migraphx`, `tensorrt`, or `openvino`. `rocm` aliases `migraphx`. |
 | `ORT_DEVICE_ID` | `0` | GPU index |
 | `OCR_ENABLED` | `true` | Text detection. Requires a build with OCR support. |
 | `MODELS_DIR` | `./assets/models` | Model directory |
@@ -118,6 +135,12 @@ If the selected provider is unavailable, the service stops at startup. Unsupport
 | `MAX_IMAGE_BYTES` | `20971520` (20 MiB) | Maximum image size |
 | `MAX_IMAGE_PIXELS` | `50000000` | Maximum decoded pixel count |
 | `SESSION_POOL_SIZE` | `2` | Sessions per model |
+| `BATCH_MAX_IMAGES` | `4` | Images per `/pic/batch` request (1..64). Raises the request body limit. |
+| `CACHE_ENTRIES` | `0` | Stored responses for identical image bytes. `0` disables the cache. |
+| `FFMPEG_PATH` | `ffmpeg` | ffmpeg binary used by `/video/check` |
+| `VIDEO_SAMPLE_FPS` | `1` | Frames sampled per second (0.1..30) |
+| `VIDEO_MAX_FRAMES` | `24` | Frame cap per video (1..240) |
+| `VIDEO_MAX_BYTES` | `67108864` (64 MiB) | Maximum video upload |
 | `NSFW_ALLOW_DEGRADED` | `false` | Allow startup after a required model fails to load. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 | `LOG_FORMAT` | `text` | `text` or `json` |
