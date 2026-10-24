@@ -69,21 +69,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -eu
-          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" dist/*.tar.gz dist/checksums.txt --clobber
-            exit 0
+          set -eux
+          if ! gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            git fetch -q --tags origin
+            prev=$(git tag --sort=-creatordate | grep -E '^v[0-9]' | grep -v -x "$GITHUB_REF_NAME" | head -1 || true)
+            {
+              if [ -n "$prev" ]; then
+                echo "## Changes"
+                echo
+                git log --format='- %s' "$prev..$GITHUB_REF_NAME" | grep -v -E '^- (Release v|Merge )' || true
+                echo
+                echo "**Full changelog**: https://github.com/$GITHUB_REPOSITORY/compare/$prev...$GITHUB_REF_NAME"
+              fi
+            } > notes.md
+            gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.md
           fi
-          git fetch -q --tags origin
-          prev=$(git tag --sort=-creatordate | grep -E '^v[0-9]' | grep -v -x "$GITHUB_REF_NAME" | head -1 || true)
-          {
-            if [ -n "$prev" ]; then
-              echo "## Changes"
-              echo
-              git log --format='- %s' "$prev..$GITHUB_REF_NAME" | grep -v -E '^- (Release v|Merge )' || true
-              echo
-              echo "**Full changelog**: https://github.com/$GITHUB_REPOSITORY/compare/$prev...$GITHUB_REF_NAME"
-            fi
-          } > notes.md
-          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --notes-file notes.md \
-            dist/*.tar.gz dist/checksums.txt
+          gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" dist/*.tar.gz dist/checksums.txt --clobber
