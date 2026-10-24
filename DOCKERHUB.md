@@ -37,6 +37,7 @@ All image endpoints accept this JSON request:
 | HTTP endpoint | Response |
 | --- | --- |
 | `GET /ping` | Service status |
+| `GET /metrics` | Prometheus metrics |
 | `POST /pic/check` | `nsfwPic` and `nsfwText` flags |
 | `POST /pic/labels` | Probabilities for `drawings`, `hentai`, `neutral`, `porn`, and `sexy` |
 | `POST /pic/analyze` | Full analysis, model scores, region detections, and elapsed time |
@@ -74,6 +75,8 @@ The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns o
 When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
 
 Send a video as a multipart `file` field to `/video/check`; the response holds one analysis per sampled frame and a summary. The image endpoints also accept raw bytes at `/pic/upload`. The Docker image includes ffmpeg.
+
+Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
 
 Errors use this shape:
 

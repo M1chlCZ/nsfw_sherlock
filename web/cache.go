@@ -76,3 +76,9 @@ func cacheEntryOf(element *list.Element) *cacheEntry {
 	entry, _ := element.Value.(*cacheEntry)
 	return entry
 }
+
+func (c *responseCache) size() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.order.Len()
+}

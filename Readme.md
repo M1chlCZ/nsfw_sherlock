@@ -65,6 +65,7 @@ All image endpoints accept this JSON request:
 | HTTP endpoint | Response |
 | --- | --- |
 | `GET /ping` | Service status |
+| `GET /metrics` | Prometheus metrics |
 | `POST /pic/check` | `nsfwPic` and `nsfwText` flags |
 | `POST /pic/labels` | Probabilities for `drawings`, `hentai`, `neutral`, `porn`, and `sexy` |
 | `POST /pic/analyze` | Full analysis, model scores, region detections, and elapsed time |
@@ -103,6 +104,8 @@ elapsed time) and `frames`, with one analysis per sampled frame. Install
 ffmpeg on the host, or use the Docker image, which includes it. Without ffmpeg
 the endpoint answers 503. Uploads are limited to `VIDEO_MAX_BYTES` and the
 whole scan stops after 120 seconds.
+
+Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
 The [service definition](proto/nsfw.proto) contains the request and response types.

@@ -20,6 +20,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v3/middleware/recover"
+	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -53,6 +54,7 @@ type handlers struct {
 	timeout       time.Duration
 	batchMax      int
 	cache         *responseCache
+	metrics       *metricsState
 	video         video.Extractor
 	videoLimits   video.Limits
 	videoMaxBytes int64
@@ -93,6 +95,7 @@ func newApp(
 	if cfg.CacheEntries > 0 {
 		h.cache = newResponseCache(cfg.CacheEntries)
 	}
+	h.metrics = newMetricsState(h.cache)
 	limit := concurrencyLimiter(make(chan struct{}, requestConcurrency))
 	bodyLimit := batchBodyLimit(cfg.MaxImageBytes, h.batchMax)
 	if videoLimit := int(cfg.VideoMaxBytes) + bodyLimitOverhead; videoLimit > bodyLimit {
@@ -110,11 +113,14 @@ func newApp(
 		ErrorHandler:  errorHandler(log),
 	})
 	app.Use(requestContext(baseCtx))
+	app.Use(requestid.New())
 	app.Use(requestLogger(log))
 	app.Use(fiberrecover.New(fiberrecover.Config{EnableStackTrace: true}))
 	app.Use(cors.New())
+	app.Use(metricsMiddleware(h.metrics))
 
 	app.Get("/ping", h.ping)
+	app.Get(metricsPath, h.metrics.handle)
 	app.Post("/pic/check", limit, h.picCheck)
 	app.Post("/pic/labels", limit, h.picLabels)
 	app.Post("/pic/analyze", limit, h.picAnalyze)
@@ -255,6 +261,7 @@ func (h *handlers) picAnalysis(c fiber.Ctx, endpoint string, build func(engine.A
 	if err != nil {
 		return utils.ReportError(c, err.Error(), analyzeErrorStatus(err))
 	}
+	h.metrics.observeVerdict(analysis.Verdict)
 	nsfwText, err := h.textNSFW(c.Context(), data)
 	if err != nil {
 		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
@@ -365,6 +372,7 @@ func (h *handlers) checkOne(ctx context.Context, req picRequest) any {
 	if err != nil {
 		return utils.ErrorResult(err.Error())
 	}
+	h.metrics.observeVerdict(analysis.Verdict)
 	nsfwText, err := h.textNSFW(ctx, data)
 	if err != nil {
 		return utils.ErrorResult(err.Error())
@@ -483,6 +491,9 @@ func requestLogger(log *slog.Logger) fiber.Handler {
 			"path", c.Path(),
 			"status", status,
 			"duration", time.Since(start),
+		}
+		if rid := requestid.FromContext(c); rid != "" {
+			attrs = append(attrs, "requestId", rid)
 		}
 		if err != nil {
 			log.Error("http request", append(attrs, "error", err)...)
