@@ -569,3 +569,33 @@ func TestAnalysisJSONShape(t *testing.T) {
 		t.Errorf("marshaled empty Analysis = %s, want detections []", empty)
 	}
 }
+
+func TestCombineWithSensitivity(t *testing.T) {
+	photo := classifierOutput("photo", RolePhoto, map[string]float32{"high": 0.3, "neutral": 0.7})
+
+	if got := CombineWith("balanced", []ModelOutput{photo}, nil, combineRules, 1); got.Verdict != VerdictSFW {
+		t.Fatalf("default sensitivity verdict = %q, want sfw", got.Verdict)
+	}
+	if got := CombineWith("balanced", []ModelOutput{photo}, nil, combineRules, 2); got.Verdict != VerdictExplicit {
+		t.Fatalf("sensitivity 2 verdict = %q, want explicit for porn 0.3", got.Verdict)
+	}
+	if got := CombineWith("balanced", []ModelOutput{photo}, nil, combineRules, 0.4); got.Verdict != VerdictSFW {
+		t.Fatalf("sensitivity 0.4 verdict = %q, want sfw", got.Verdict)
+	}
+
+	zero := CombineWith("balanced", []ModelOutput{photo}, nil, combineRules, 0)
+	one := CombineWith("balanced", []ModelOutput{photo}, nil, combineRules, 1)
+	if zero.Verdict != one.Verdict {
+		t.Error("sensitivity 0 must behave like the default")
+	}
+
+	low := classifierOutput("photo", RolePhoto, map[string]float32{"high": 0.15, "neutral": 0.1})
+	strict := CombineWith("balanced", []ModelOutput{low}, nil, combineRules, 1)
+	if !strict.LegacyNSFW() {
+		t.Error("the default sensitivity must flag porn 0.15 in the legacy check")
+	}
+	relaxed := CombineWith("balanced", []ModelOutput{low}, nil, combineRules, 0.5)
+	if relaxed.LegacyNSFW() {
+		t.Error("sensitivity 0.5 must not flag porn 0.15 in the legacy check")
+	}
+}

@@ -62,6 +62,8 @@ All image endpoints accept this JSON request:
 {"base64":"<base64-encoded image>","filename":"image.jpg"}
 ```
 
+Set `sensitivity` between 0.1 and 10 to change the decision thresholds. Higher values flag more images. The default is 1. The gRPC requests have the same field.
+
 | HTTP endpoint | Response |
 | --- | --- |
 | `GET /ping` | Service status |

@@ -22,7 +22,7 @@ var (
 
 // Analyzer is the engine surface the gRPC API needs.
 type Analyzer interface {
-	Analyze(ctx context.Context, data []byte) (engine.Analysis, error)
+	AnalyzeWith(ctx context.Context, data []byte, opts engine.AnalyzeOptions) (engine.Analysis, error)
 }
 
 // TextChecker reports whether an encoded image contains bad words.
@@ -54,7 +54,7 @@ func NewServer(analyzer Analyzer, checker TextChecker, log *slog.Logger) *Server
 
 // Detect reports whether an image or its embedded text is NSFW.
 func (s *Server) Detect(ctx context.Context, req *grpcModels.NSFWRequest) (*grpcModels.NSFWResponse, error) {
-	analysis, data, err := s.analyze(ctx, req.GetBase64())
+	analysis, data, err := s.analyze(ctx, req.GetBase64(), float64(req.GetSensitivity()))
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (s *Server) Detect(ctx context.Context, req *grpcModels.NSFWRequest) (*grpc
 
 // DetectLabels returns the legacy five-label scores and text flag.
 func (s *Server) DetectLabels(ctx context.Context, req *grpcModels.NSFWLabelsRequest) (*grpcModels.NSFWLabels, error) {
-	analysis, data, err := s.analyze(ctx, req.GetBase64())
+	analysis, data, err := s.analyze(ctx, req.GetBase64(), float64(req.GetSensitivity()))
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (s *Server) DetectLabels(ctx context.Context, req *grpcModels.NSFWLabelsReq
 
 // Analyze returns the full engine analysis for one image plus the text flag.
 func (s *Server) Analyze(ctx context.Context, req *grpcModels.NSFWRequest) (*grpcModels.Analysis, error) {
-	analysis, data, err := s.analyze(ctx, req.GetBase64())
+	analysis, data, err := s.analyze(ctx, req.GetBase64(), float64(req.GetSensitivity()))
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,11 @@ func (s *Server) Analyze(ctx context.Context, req *grpcModels.NSFWRequest) (*grp
 	}, nil
 }
 
-func (s *Server) analyze(ctx context.Context, payload string) (engine.Analysis, []byte, error) {
+func (s *Server) analyze(
+	ctx context.Context,
+	payload string,
+	sensitivity float64,
+) (engine.Analysis, []byte, error) {
 	if payload == "" {
 		return engine.Analysis{}, nil, status.Error(codes.InvalidArgument, "empty base64")
 	}
@@ -126,7 +130,7 @@ func (s *Server) analyze(ctx context.Context, payload string) (engine.Analysis, 
 	if err != nil {
 		return engine.Analysis{}, nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	analysis, err := s.analyzer.Analyze(ctx, data)
+	analysis, err := s.analyzer.AnalyzeWith(ctx, data, engine.AnalyzeOptions{Sensitivity: sensitivity})
 	if err != nil {
 		s.log.WarnContext(ctx, "grpc: analyze failed", "error", err)
 		return engine.Analysis{}, nil, rpcError(err)
@@ -147,6 +151,8 @@ func (s *Server) textNSFW(ctx context.Context, data []byte) (bool, error) {
 
 func rpcError(err error) error {
 	switch {
+	case errors.Is(err, engine.ErrInvalidSensitivity):
+		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, engine.ErrImageTooLarge):
 		return status.Error(codes.ResourceExhausted, err.Error())
 	case errors.Is(err, engine.ErrUnsupportedImage):

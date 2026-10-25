@@ -42,7 +42,7 @@ var (
 
 // Analyzer is the engine surface the HTTP API needs.
 type Analyzer interface {
-	Analyze(ctx context.Context, data []byte) (engine.Analysis, error)
+	AnalyzeWith(ctx context.Context, data []byte, opts engine.AnalyzeOptions) (engine.Analysis, error)
 }
 
 // TextChecker reports whether an encoded image contains bad words.
@@ -179,8 +179,9 @@ func (h *handlers) ping(c fiber.Ctx) error {
 }
 
 type picRequest struct {
-	Base64   string `json:"base64"`
-	Filename string `json:"filename"`
+	Base64      string  `json:"base64"`
+	Filename    string  `json:"filename"`
+	Sensitivity float64 `json:"sensitivity"`
 }
 
 type checkResponse struct {
@@ -247,17 +248,17 @@ func (h *handlers) picAnalyze(c fiber.Ctx) error {
 }
 
 func (h *handlers) picAnalysis(c fiber.Ctx, endpoint string, build func(engine.Analysis, bool) any) error {
-	data, ok := h.picData(c)
+	data, sensitivity, ok := h.picData(c)
 	if !ok {
 		return nil
 	}
-	key := cacheKey(endpoint, data)
+	key := cacheKey(endpoint, sensitivity, data)
 	if h.cache != nil {
 		if body, hit := h.cache.get(key); hit {
 			return sendCachedJSON(c, body)
 		}
 	}
-	analysis, err := h.analyzeData(c.Context(), data)
+	analysis, err := h.analyzeData(c.Context(), data, sensitivity)
 	if err != nil {
 		return utils.ReportError(c, err.Error(), analyzeErrorStatus(err))
 	}
@@ -269,10 +270,10 @@ func (h *handlers) picAnalysis(c fiber.Ctx, endpoint string, build func(engine.A
 	return h.sendJSON(c, key, build(analysis, nsfwText))
 }
 
-func (h *handlers) analyzeData(ctx context.Context, data []byte) (engine.Analysis, error) {
+func (h *handlers) analyzeData(ctx context.Context, data []byte, sensitivity float64) (engine.Analysis, error) {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
-	analysis, err := h.analyzer.Analyze(ctx, data)
+	analysis, err := h.analyzer.AnalyzeWith(ctx, data, engine.AnalyzeOptions{Sensitivity: sensitivity})
 	if err != nil {
 		return engine.Analysis{}, err
 	}
@@ -298,22 +299,26 @@ func sendCachedJSON(c fiber.Ctx, body []byte) error {
 	return c.Send(body)
 }
 
-func (h *handlers) picData(c fiber.Ctx) ([]byte, bool) {
+func (h *handlers) picData(c fiber.Ctx) ([]byte, float64, bool) {
 	var req picRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
-		return nil, false
+		return nil, 0, false
 	}
 	if req.Base64 == "" {
 		_ = utils.ReportError(c, "Bad Request", fiber.StatusBadRequest)
-		return nil, false
+		return nil, 0, false
+	}
+	if req.Sensitivity != 0 && (req.Sensitivity < 0.1 || req.Sensitivity > 10) {
+		_ = utils.ReportError(c, "sensitivity must be between 0.1 and 10", fiber.StatusBadRequest)
+		return nil, 0, false
 	}
 	data, err := utils.DecodePayload(req.Base64)
 	if err != nil {
 		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
-		return nil, false
+		return nil, 0, false
 	}
-	return data, true
+	return data, req.Sensitivity, true
 }
 
 type batchRequest struct {
@@ -358,17 +363,20 @@ func (h *handlers) checkOne(ctx context.Context, req picRequest) any {
 	if req.Base64 == "" {
 		return utils.ErrorResult("Bad Request")
 	}
+	if req.Sensitivity != 0 && (req.Sensitivity < 0.1 || req.Sensitivity > 10) {
+		return utils.ErrorResult("sensitivity must be between 0.1 and 10")
+	}
 	data, err := utils.DecodePayload(req.Base64)
 	if err != nil {
 		return utils.ErrorResult(err.Error())
 	}
-	key := cacheKey("/pic/check", data)
+	key := cacheKey("/pic/check", req.Sensitivity, data)
 	if h.cache != nil {
 		if body, hit := h.cache.get(key); hit {
 			return json.RawMessage(body)
 		}
 	}
-	analysis, err := h.analyzeData(ctx, data)
+	analysis, err := h.analyzeData(ctx, data, req.Sensitivity)
 	if err != nil {
 		return utils.ErrorResult(err.Error())
 	}

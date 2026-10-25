@@ -32,15 +32,21 @@ type fakeAnalyzer struct {
 	err      error
 	fn       func(ctx context.Context, data []byte) (engine.Analysis, error)
 
-	mu    sync.Mutex
-	calls int
-	data  []byte
+	mu      sync.Mutex
+	calls   int
+	data    []byte
+	options engine.AnalyzeOptions
 }
 
-func (f *fakeAnalyzer) Analyze(ctx context.Context, data []byte) (engine.Analysis, error) {
+func (f *fakeAnalyzer) AnalyzeWith(
+	ctx context.Context,
+	data []byte,
+	opts engine.AnalyzeOptions,
+) (engine.Analysis, error) {
 	f.mu.Lock()
 	f.calls++
 	f.data = append([]byte(nil), data...)
+	f.options = opts
 	f.mu.Unlock()
 	if f.fn != nil {
 		return f.fn(ctx, data)
@@ -52,6 +58,12 @@ func (f *fakeAnalyzer) snapshot() (int, []byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calls, append([]byte(nil), f.data...)
+}
+
+func (f *fakeAnalyzer) lastOptions() engine.AnalyzeOptions {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.options
 }
 
 func testLogger() *slog.Logger {
@@ -676,4 +688,29 @@ func waitForDial(t *testing.T, addr string) net.Conn {
 	}
 	t.Fatalf("server did not accept connections on %s", addr)
 	return nil
+}
+
+func TestSensitivityReachesTheAnalyzer(t *testing.T) {
+	analyzer := &fakeAnalyzer{}
+	client := newTestClient(t, analyzer, nil)
+	_, err := client.Detect(context.Background(), &grpcModels.NSFWRequest{
+		Base64:      encodePayload(t),
+		Sensitivity: 2,
+	})
+	if err != nil {
+		t.Fatalf("Detect() error = %v, want nil", err)
+	}
+	if got := analyzer.lastOptions().Sensitivity; got != 2 {
+		t.Fatalf("analyzer sensitivity = %v, want 2", got)
+	}
+}
+
+func TestInvalidSensitivityMapsToInvalidArgument(t *testing.T) {
+	analyzer := &fakeAnalyzer{err: engine.ErrInvalidSensitivity}
+	client := newTestClient(t, analyzer, nil)
+	_, err := client.Detect(context.Background(), &grpcModels.NSFWRequest{
+		Base64:      encodePayload(t),
+		Sensitivity: 11,
+	})
+	assertCode(t, err, codes.InvalidArgument)
 }

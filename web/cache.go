@@ -3,7 +3,9 @@ package web
 import (
 	"container/list"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
+	"math"
 	"sync"
 	"sync/atomic"
 )
@@ -31,10 +33,13 @@ func newResponseCache(maxEntries int) *responseCache {
 	}
 }
 
-func cacheKey(endpoint string, data []byte) string {
+func cacheKey(endpoint string, sensitivity float64, data []byte) string {
 	digest := sha256.New()
 	digest.Write([]byte(endpoint))
 	digest.Write([]byte{0})
+	var encoded [8]byte
+	binary.LittleEndian.PutUint64(encoded[:], math.Float64bits(sensitivity))
+	digest.Write(encoded[:])
 	digest.Write(data)
 	return hex.EncodeToString(digest.Sum(nil))
 }
