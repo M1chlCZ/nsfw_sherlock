@@ -13,7 +13,10 @@ import (
 
 const metricsPath = "/metrics"
 
-var durationBuckets = [...]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+var (
+	durationBuckets    = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+	jobDurationBuckets = []float64{0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600}
+)
 
 // metricsState gathers Prometheus metrics for the HTTP API.
 type metricsState struct {
@@ -23,20 +26,37 @@ type metricsState struct {
 	histograms map[string]*latencyHistogram
 	inflight   int64
 	cache      *responseCache
+	jobs       *jobManager
 }
 
 type latencyHistogram struct {
-	buckets [len(durationBuckets)]int64
+	bounds  []float64
+	buckets []int64
 	sum     float64
 	count   int64
 }
 
-func newMetricsState(cache *responseCache) *metricsState {
+func newLatencyHistogram(bounds []float64) *latencyHistogram {
+	return &latencyHistogram{bounds: bounds, buckets: make([]int64, len(bounds))}
+}
+
+func (h *latencyHistogram) observe(seconds float64) {
+	for i, bound := range h.bounds {
+		if seconds <= bound {
+			h.buckets[i]++
+		}
+	}
+	h.sum += seconds
+	h.count++
+}
+
+func newMetricsState(cache *responseCache, jobs *jobManager) *metricsState {
 	return &metricsState{
 		requests:   make(map[string]int64),
 		verdicts:   make(map[string]int64),
 		histograms: make(map[string]*latencyHistogram),
 		cache:      cache,
+		jobs:       jobs,
 	}
 }
 
@@ -76,16 +96,10 @@ func (m *metricsState) observe(endpoint string, status int, duration time.Durati
 	m.requests[endpoint+"\x00"+strconv.Itoa(status)]++
 	histogram := m.histograms[endpoint]
 	if histogram == nil {
-		histogram = &latencyHistogram{}
+		histogram = newLatencyHistogram(durationBuckets)
 		m.histograms[endpoint] = histogram
 	}
-	for i, bound := range durationBuckets {
-		if elapsed <= bound {
-			histogram.buckets[i]++
-		}
-	}
-	histogram.sum += elapsed
-	histogram.count++
+	histogram.observe(elapsed)
 }
 
 func (m *metricsState) observeVerdict(verdict string) {
@@ -115,24 +129,7 @@ func (m *metricsState) render() string {
 	}
 	sort.Strings(endpoints)
 	for _, endpoint := range endpoints {
-		histogram := m.histograms[endpoint]
-		for i, bound := range durationBuckets {
-			fmt.Fprintf(
-				&b,
-				"nsfw_request_duration_seconds_bucket{endpoint=%q,le=%q} %d\n",
-				endpoint,
-				strconv.FormatFloat(bound, 'g', -1, 64),
-				histogram.buckets[i],
-			)
-		}
-		fmt.Fprintf(
-			&b,
-			"nsfw_request_duration_seconds_bucket{endpoint=%q,le=\"+Inf\"} %d\n",
-			endpoint,
-			histogram.count,
-		)
-		fmt.Fprintf(&b, "nsfw_request_duration_seconds_sum{endpoint=%q} %g\n", endpoint, histogram.sum)
-		fmt.Fprintf(&b, "nsfw_request_duration_seconds_count{endpoint=%q} %d\n", endpoint, histogram.count)
+		writeHistogram(&b, "nsfw_request_duration_seconds", fmt.Sprintf("endpoint=%q,", endpoint), m.histograms[endpoint])
 	}
 	b.WriteString("# HELP nsfw_verdicts_total Analyzed images per verdict.\n")
 	b.WriteString("# TYPE nsfw_verdicts_total counter\n")
@@ -153,7 +150,30 @@ func (m *metricsState) render() string {
 	b.WriteString("# HELP nsfw_inflight_requests Requests in flight.\n")
 	b.WriteString("# TYPE nsfw_inflight_requests gauge\n")
 	fmt.Fprintf(&b, "nsfw_inflight_requests %d\n", m.inflight)
+	if m.jobs != nil {
+		m.jobs.writeMetrics(&b)
+	}
 	return b.String()
+}
+
+func writeHistogram(b *strings.Builder, name, labels string, histogram *latencyHistogram) {
+	for i, bound := range histogram.bounds {
+		fmt.Fprintf(
+			b,
+			"%s_bucket{%sle=%q} %d\n",
+			name,
+			labels,
+			strconv.FormatFloat(bound, 'g', -1, 64),
+			histogram.buckets[i],
+		)
+	}
+	fmt.Fprintf(b, "%s_bucket{%sle=\"+Inf\"} %d\n", name, labels, histogram.count)
+	suffix := ""
+	if labels != "" {
+		suffix = "{" + strings.TrimSuffix(labels, ",") + "}"
+	}
+	fmt.Fprintf(b, "%s_sum%s %g\n", name, suffix, histogram.sum)
+	fmt.Fprintf(b, "%s_count%s %d\n", name, suffix, histogram.count)
 }
 
 func (m *metricsState) handle(c fiber.Ctx) error {

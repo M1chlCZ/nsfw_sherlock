@@ -50,7 +50,9 @@ With `API_KEYS`, every image endpoint requires the key in the `X-API-Key` header
 | `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
 | `GET /ready` | Readiness probe; reports whether video scanning is available |
 | `POST /jobs` | Start a background batch or video analysis |
+| `GET /jobs` | Kept background jobs, newest first, with state counts |
 | `GET /jobs/{id}` | Job state and result |
+| `GET /jobs/{id}/events` | Server-sent events for a job's state changes |
 | `DELETE /jobs/{id}` | Cancel a queued job or a running analysis |
 
 Example response from `/pic/check`:
@@ -84,7 +86,7 @@ When `CACHE_ENTRIES` is greater than 0, the service stores responses for identic
 
 Send a video as a multipart `file` field to `/video/check`; the response holds one analysis per sampled frame and a summary. The image endpoints also accept raw bytes at `/pic/upload`. The Docker image includes ffmpeg.
 
-Large batches and videos can run in the background through `/jobs`: submit, poll `GET /jobs/{id}` for the state and result, and cancel with `DELETE /jobs/{id}`. Two jobs run at once and results stay for ten minutes.
+Large batches and videos can run in the background through `/jobs`: submit, poll `GET /jobs/{id}` for the state and result, and cancel with `DELETE /jobs/{id}`. `GET /jobs` lists the kept jobs with state counts, and `GET /jobs/{id}/events` streams the changes with server-sent events. `JOB_WORKERS`, `JOB_MAX_ENTRIES`, and `JOB_TTL_SECONDS` set the worker count, queue size, and result lifetime; the defaults are 2 workers, 64 jobs, and ten minutes.
 
 Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
 
@@ -153,6 +155,9 @@ If the selected provider is unavailable, the service stops at startup. Unsupport
 | `SESSION_POOL_SIZE` | `2` | Sessions per model |
 | `BATCH_MAX_IMAGES` | `4` | Images per `/pic/batch` request (1..64). Raises the request body limit. |
 | `CACHE_ENTRIES` | `0` | Stored responses for identical image bytes. `0` disables the cache. |
+| `JOB_WORKERS` | `2` | Background jobs that run at once (1..32) |
+| `JOB_MAX_ENTRIES` | `64` | Kept background jobs (1..10000) |
+| `JOB_TTL_SECONDS` | `600` | Seconds a finished job stays available (1..86400) |
 | `FFMPEG_PATH` | `ffmpeg` | ffmpeg binary used by `/video/check` |
 | `VIDEO_SAMPLE_FPS` | `1` | Frames sampled per second (0.1..30) |
 | `VIDEO_MAX_FRAMES` | `24` | Frame cap per video (1..240) |

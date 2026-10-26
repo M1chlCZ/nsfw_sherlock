@@ -38,7 +38,7 @@ func videoApp(analyzer Analyzer, extractor video.Extractor) *fiber.App {
 		analyzer:    analyzer,
 		timeout:     time.Second,
 		batchMax:    4,
-		metrics:     newMetricsState(nil),
+		metrics:     newMetricsState(nil, nil),
 		video:       extractor,
 		videoLimits: video.Limits{FPS: 2, MaxFrames: 8, MaxWidth: videoMaxWidth},
 	}
@@ -175,7 +175,7 @@ func TestVideoCheckRejectsOversizedUploads(t *testing.T) {
 		analyzer:      frameAnalyzer(),
 		timeout:       time.Second,
 		batchMax:      4,
-		metrics:       newMetricsState(nil),
+		metrics:       newMetricsState(nil, nil),
 		video:         &fakeExtractor{},
 		videoLimits:   video.Limits{FPS: 2, MaxFrames: 8, MaxWidth: videoMaxWidth},
 		videoMaxBytes: 4,

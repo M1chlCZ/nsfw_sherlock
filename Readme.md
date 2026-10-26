@@ -78,7 +78,9 @@ With `API_KEYS`, every image endpoint requires the key in the `X-API-Key` header
 | `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
 | `GET /ready` | Readiness probe; reports whether video scanning is available |
 | `POST /jobs` | Start a background batch or video analysis |
+| `GET /jobs` | Kept background jobs, newest first, with state counts |
 | `GET /jobs/{id}` | Job state and result |
+| `GET /jobs/{id}/events` | Server-sent events for a job's state changes |
 | `DELETE /jobs/{id}` | Cancel a queued job or a running analysis |
 
 Example response from `/pic/check`:
@@ -128,11 +130,31 @@ curl -fsS -F "file=@clip.mp4" http://localhost:4000/jobs
 
 The service answers 202 with a job id. Poll `GET /jobs/{id}` for the state
 (`queued`, `running`, `done`, `failed` or `canceled`) and the result.
-`DELETE /jobs/{id}` cancels a queued job or a running analysis. Two jobs run at
-once, results stay for ten minutes, and up to 64 jobs are kept.
+`DELETE /jobs/{id}` cancels a queued job or a running analysis.
 
-The `nsfw_request_duration_seconds` histogram carries an `endpoint` label, and
-`GET /ready` reports whether video scanning is available.
+`GET /jobs` lists the kept jobs newest first. Pass `state` to filter
+(`queued`, `running`, `done`, `failed` or `canceled`) and `limit` to cap the
+result; the default is 100. The `counts` field always covers every kept job.
+
+`GET /jobs/{id}/events` streams the state changes with server-sent events:
+
+```sh
+curl -N http://localhost:4000/jobs/<id>/events
+```
+
+Each event is named after the state and carries the same body as
+`GET /jobs/{id}`. The stream ends when the job finishes. A keepalive comment
+every 15 seconds keeps the connection open.
+
+`JOB_WORKERS` sets how many jobs run at once, `JOB_MAX_ENTRIES` caps the kept
+jobs, and `JOB_TTL_SECONDS` sets how long a finished job stays. The defaults
+are 2 workers, 64 jobs, and 600 seconds.
+
+The `nsfw_request_duration_seconds` histogram carries an `endpoint` label.
+The `/metrics` output also includes `nsfw_jobs_submitted_total`,
+`nsfw_jobs_rejected_total`, `nsfw_jobs_current`, `nsfw_jobs_finished_total`,
+and `nsfw_job_duration_seconds`. `GET /ready` reports whether video scanning is
+available.
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
 It also serves the standard gRPC health service and server reflection.
@@ -207,6 +229,9 @@ The v1.0.5 Linux amd64 binary passed a physical CUDA test on an RTX 5070 Ti unde
 | `SESSION_POOL_SIZE` | `2` | Sessions per model |
 | `BATCH_MAX_IMAGES` | `4` | Images per `/pic/batch` request (1..64). Raises the request body limit. |
 | `CACHE_ENTRIES` | `0` | Stored responses for identical image bytes. `0` disables the cache. |
+| `JOB_WORKERS` | `2` | Background jobs that run at once (1..32) |
+| `JOB_MAX_ENTRIES` | `64` | Kept background jobs (1..10000) |
+| `JOB_TTL_SECONDS` | `600` | Seconds a finished job stays available (1..86400) |
 | `FFMPEG_PATH` | `ffmpeg` | ffmpeg binary used by `/video/check` |
 | `VIDEO_SAMPLE_FPS` | `1` | Frames sampled per second (0.1..30) |
 | `VIDEO_MAX_FRAMES` | `24` | Frame cap per video (1..240) |

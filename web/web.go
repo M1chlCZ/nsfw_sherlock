@@ -94,12 +94,16 @@ func newApp(
 		},
 		videoMaxBytes:  cfg.VideoMaxBytes,
 		videoAvailable: ffmpegAvailable(cfg.FFmpegPath),
-		jobs:           newJobManager(baseCtx),
+		jobs: newJobManager(baseCtx, jobOptions{
+			Workers:    cfg.JobWorkers,
+			MaxEntries: cfg.JobMaxEntries,
+			TTL:        time.Duration(cfg.JobTTLSeconds) * time.Second,
+		}),
 	}
 	if cfg.CacheEntries > 0 {
 		h.cache = newResponseCache(cfg.CacheEntries)
 	}
-	h.metrics = newMetricsState(h.cache)
+	h.metrics = newMetricsState(h.cache, h.jobs)
 	limit := concurrencyLimiter(make(chan struct{}, requestConcurrency))
 	bodyLimit := batchBodyLimit(cfg.MaxImageBytes, h.batchMax)
 	if videoLimit := int(cfg.VideoMaxBytes) + bodyLimitOverhead; videoLimit > bodyLimit {
@@ -139,7 +143,9 @@ func newApp(
 	app.Post("/pic/upload", limit, h.picUpload)
 	app.Post("/video/check", limit, h.videoCheck)
 	app.Post("/jobs", limit, h.submitJob)
+	app.Get("/jobs", h.listJobs)
 	app.Get("/jobs/:id", h.getJob)
+	app.Get("/jobs/:id/events", h.jobEvents)
 	app.Delete("/jobs/:id", h.cancelJob)
 	return app
 }
