@@ -118,6 +118,12 @@ func newApp(
 	app.Use(fiberrecover.New(fiberrecover.Config{EnableStackTrace: true}))
 	app.Use(cors.New())
 	app.Use(metricsMiddleware(h.metrics))
+	if guard := apiKeyGuard(cfg.APIKeys); guard != nil {
+		app.Use(guard)
+	}
+	if cfg.RateLimitRPM > 0 {
+		app.Use(rateLimitMiddleware(newRateLimiter(cfg.RateLimitRPM)))
+	}
 
 	app.Get("/ping", h.ping)
 	app.Get(metricsPath, h.metrics.handle)

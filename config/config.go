@@ -27,6 +27,8 @@ const (
 	envVideoSampleFPS  = "VIDEO_SAMPLE_FPS"
 	envVideoMaxFrames  = "VIDEO_MAX_FRAMES"
 	envVideoMaxBytes   = "VIDEO_MAX_BYTES"
+	envAPIKeys         = "API_KEYS"
+	envRateLimitRPM    = "RATE_LIMIT_RPM"
 	envLogLevel        = "LOG_LEVEL"
 	envLogFormat       = "LOG_FORMAT"
 )
@@ -52,6 +54,8 @@ const (
 	defaultVideoMaxBytes   = 64 << 20
 	maxVideoSampleFPS      = 30.0
 	maxVideoMaxFrames      = 240
+	defaultRateLimitRPM    = 0
+	maxRateLimitRPM        = 1_000_000
 	defaultLogLevel        = "info"
 	defaultLogFormat       = "text"
 )
@@ -74,6 +78,8 @@ type Config struct {
 	SessionPoolSize int
 	BatchMaxImages  int
 	CacheEntries    int
+	APIKeys         []string
+	RateLimitRPM    int
 	FFmpegPath      string
 	VideoSampleFPS  float64
 	VideoMaxFrames  int
@@ -99,6 +105,7 @@ func Load(getenv func(string) string) (Config, error) {
 		SessionPoolSize: defaultSessionPoolSize,
 		BatchMaxImages:  defaultBatchMaxImages,
 		CacheEntries:    defaultCacheEntries,
+		RateLimitRPM:    defaultRateLimitRPM,
 		FFmpegPath:      defaultFFmpegPath,
 		VideoSampleFPS:  defaultVideoSampleFPS,
 		VideoMaxFrames:  defaultVideoMaxFrames,
@@ -213,6 +220,18 @@ func (cfg *Config) loadLimits(getenv func(string) string) error {
 			maxCacheEntries,
 		)
 	}
+	cfg.APIKeys = parseAPIKeys(getenv(envAPIKeys))
+	if cfg.RateLimitRPM, err = intFromEnv(getenv, envRateLimitRPM, cfg.RateLimitRPM); err != nil {
+		return err
+	}
+	if cfg.RateLimitRPM < 0 || cfg.RateLimitRPM > maxRateLimitRPM {
+		return fmt.Errorf(
+			"config: %s: value %d must be in 0..%d",
+			envRateLimitRPM,
+			cfg.RateLimitRPM,
+			maxRateLimitRPM,
+		)
+	}
 	cfg.FFmpegPath = stringFromEnv(getenv, envFFmpegPath, cfg.FFmpegPath)
 	if cfg.VideoSampleFPS, err = floatFromEnv(getenv, envVideoSampleFPS, cfg.VideoSampleFPS); err != nil {
 		return err
@@ -247,6 +266,16 @@ func (cfg *Config) loadLimits(getenv func(string) string) error {
 		)
 	}
 	return nil
+}
+
+func parseAPIKeys(raw string) []string {
+	var keys []string
+	for part := range strings.SplitSeq(raw, ",") {
+		if key := strings.TrimSpace(part); key != "" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
 }
 
 func appEnvFromEnv(getenv func(string) string, def string) (string, error) {

@@ -64,6 +64,8 @@ All image endpoints accept this JSON request:
 
 Set `sensitivity` between 0.1 and 10 to change the decision thresholds. Higher values flag more images. The default is 1. The gRPC requests have the same field.
 
+With `API_KEYS`, every image endpoint requires the key in the `X-API-Key` header. `/ping` and `/metrics` stay open.
+
 | HTTP endpoint | Response |
 | --- | --- |
 | `GET /ping` | Service status |
@@ -164,6 +166,8 @@ Unsupported operators can still use the CPU.
 | `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, `migraphx`, `tensorrt`, or `openvino`. `rocm` aliases `migraphx`. |
 | `ORT_DEVICE_ID` | `0` | GPU index |
 | `OCR_ENABLED` | `true` | Text detection. Requires a build with OCR support. |
+| `API_KEYS` | (none) | Comma-separated keys for the `X-API-Key` header. Empty disables the check. |
+| `RATE_LIMIT_RPM` | `0` | Requests per minute for each key or IP. `0` disables the limit. |
 
 <details>
 <summary>Paths, limits, and logging</summary>
