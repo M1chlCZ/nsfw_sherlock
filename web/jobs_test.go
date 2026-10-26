@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,10 +17,8 @@ func waitForJobState(t *testing.T, manager *jobManager, id string, states ...str
 		if err != nil {
 			t.Fatalf("get(%s): %v", id, err)
 		}
-		for _, state := range states {
-			if view.State == state {
-				return view
-			}
+		if slices.Contains(states, view.State) {
+			return view
 		}
 		time.Sleep(time.Millisecond)
 	}
@@ -68,7 +67,7 @@ func TestJobManagerCancelsQueuedJobs(t *testing.T) {
 	defer close(release)
 	blocking := func(context.Context) (any, error) {
 		<-release
-		return nil, nil
+		return "done", nil
 	}
 	first, err := manager.submit("batch", blocking)
 	if err != nil {
@@ -130,7 +129,7 @@ func TestJobManagerRejectsCancelingFinishedJobs(t *testing.T) {
 func TestJobManagerDropsExpiredJobs(t *testing.T) {
 	manager := newJobManager(context.Background())
 	manager.ttl = 10 * time.Millisecond
-	view, err := manager.submit("batch", func(context.Context) (any, error) { return nil, nil })
+	view, err := manager.submit("batch", func(context.Context) (any, error) { return "done", nil })
 	if err != nil {
 		t.Fatalf("submit: %v", err)
 	}
@@ -148,11 +147,13 @@ func TestJobManagerLimitsTheQueue(t *testing.T) {
 	defer close(release)
 	if _, err := manager.submit("batch", func(context.Context) (any, error) {
 		<-release
-		return nil, nil
+		return "done", nil
 	}); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
-	if _, err := manager.submit("batch", func(context.Context) (any, error) { return nil, nil }); !errors.Is(err, errJobFull) {
+	if _, err := manager.submit("batch", func(context.Context) (any, error) {
+		return "done", nil
+	}); !errors.Is(err, errJobFull) {
 		t.Fatalf("second submit = %v, want errJobFull", err)
 	}
 }
@@ -182,7 +183,7 @@ func TestJobManagerRunsCleanupForCancelledQueuedJobs(t *testing.T) {
 	}()
 	blocking := func(context.Context) (any, error) {
 		<-release
-		return nil, nil
+		return "done", nil
 	}
 	first, err := manager.submit("video", blocking)
 	if err != nil {

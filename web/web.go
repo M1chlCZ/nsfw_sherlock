@@ -26,6 +26,7 @@ import (
 
 const (
 	successMessage    = "success"
+	statusField       = "status"
 	serverTimeout     = 240 * time.Second
 	bodyLimitOverhead = 64 << 10
 	bodyLimitFloor    = 1 << 20
@@ -189,7 +190,7 @@ func StartWebServer(
 }
 
 func (h *handlers) ping(c fiber.Ctx) error {
-	return c.JSON(fiber.Map{"status": "OK"})
+	return c.JSON(fiber.Map{statusField: "OK"})
 }
 
 type readyResponse struct {

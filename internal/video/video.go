@@ -74,6 +74,7 @@ func (f *FFmpeg) Extract(ctx context.Context, path string, limits Limits) ([]Fra
 		return nil, fmt.Errorf("video: cannot create the frame directory: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
+	//nolint:gosec // No shell: the binary comes from config, the input is a local file.
 	command := exec.CommandContext(ctx, f.Path,
 		"-v", "error",
 		"-nostdin",
