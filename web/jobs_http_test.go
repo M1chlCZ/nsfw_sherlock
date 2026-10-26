@@ -211,6 +211,79 @@ func TestJobEventsStreamEndsAtTerminalState(t *testing.T) {
 	}
 }
 
+func TestJobEventsStreamsUntilTheJobEnds(t *testing.T) {
+	manager := newJobManager(context.Background(), jobOptions{Workers: 1})
+	h := &handlers{
+		analyzer: &fakeAnalyzer{},
+		timeout:  time.Second,
+		batchMax: 1,
+		metrics:  newMetricsState(nil, nil),
+		jobs:     manager,
+	}
+	app := fiber.New()
+	app.Get("/jobs/:id/events", h.jobEvents)
+
+	view, err := manager.submit("batch", func(ctx context.Context) (any, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	waitForJobState(t, manager, view.ID, jobRunning)
+
+	type streamResult struct {
+		status int
+		body   []byte
+		err    error
+	}
+	streamed := make(chan streamResult, 1)
+	go func() {
+		resp, err := app.Test(
+			httptest.NewRequest(http.MethodGet, "/jobs/"+view.ID+"/events", nil),
+			fiber.TestConfig{Timeout: 5 * time.Second},
+		)
+		if err != nil {
+			streamed <- streamResult{err: err}
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		streamed <- streamResult{status: resp.StatusCode, body: body, err: err}
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		manager.mu.Lock()
+		subscribers := len(manager.subscribers[view.ID])
+		manager.mu.Unlock()
+		if subscribers > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the event stream did not subscribe")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := manager.cancel(view.ID); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+
+	result := <-streamed
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if result.status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", result.status, result.body)
+	}
+	stream := string(result.body)
+	for _, want := range []string{"event: running", "event: canceled", `"state":"canceled"`} {
+		if !strings.Contains(stream, want) {
+			t.Errorf("stream lacks %q:\n%s", want, stream)
+		}
+	}
+}
+
 func TestSubmitVideoJob(t *testing.T) {
 	extractor := &fakeExtractor{frames: []video.Frame{
 		{Index: 1, TimeMs: 0, Data: []byte("explicit")},

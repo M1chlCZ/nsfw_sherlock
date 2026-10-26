@@ -145,7 +145,6 @@ func (h *handlers) jobEvents(c fiber.Ctx) error {
 	if err != nil {
 		return utils.ReportError(c, "internal error", fiber.StatusInternalServerError)
 	}
-	defer unsubscribe()
 
 	c.Set(fiber.HeaderContentType, "text/event-stream")
 	c.Set(fiber.HeaderCacheControl, "no-cache")
@@ -153,7 +152,8 @@ func (h *handlers) jobEvents(c fiber.Ctx) error {
 	c.Set("X-Accel-Buffering", "no")
 	c.Status(fiber.StatusOK)
 
-	return c.SendStreamWriter(func(w *bufio.Writer) {
+	err = c.SendStreamWriter(func(w *bufio.Writer) {
+		defer unsubscribe()
 		if _, err := w.WriteString("retry: 3000\n\n"); err != nil {
 			return
 		}
@@ -184,6 +184,11 @@ func (h *handlers) jobEvents(c fiber.Ctx) error {
 			}
 		}
 	})
+	if err != nil {
+		unsubscribe()
+		return err
+	}
+	return nil
 }
 
 func writeJobEvent(w *bufio.Writer, view jobView) error {
