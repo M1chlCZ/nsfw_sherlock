@@ -132,7 +132,7 @@ func TestRateLimitIgnoresKeysWhenAuthIsDisabled(t *testing.T) {
 
 	for i := range 2 {
 		req := newJSONRequest(http.MethodPost, "/pic/check", picBody(payload, "a.png"))
-		req.Header.Set("X-API-Key", "rotating-"+string(rune('a'+i)))
+		req.Header.Set("X-Api-Key", "rotating-"+string(rune('a'+i)))
 		status, body, err := send(app, req)
 		if err != nil {
 			t.Fatal(err)
@@ -164,7 +164,7 @@ func TestRateLimitUsesKeysWhenAuthIsEnabled(t *testing.T) {
 
 	for _, key := range []string{"key-one", "key-two"} {
 		req := newJSONRequest(http.MethodPost, "/pic/check", picBody(payload, "a.png"))
-		req.Header.Set("X-API-Key", key)
+		req.Header.Set("X-Api-Key", key)
 		status, body, err := send(app, req)
 		if err != nil {
 			t.Fatal(err)

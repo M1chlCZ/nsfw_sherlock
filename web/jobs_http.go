@@ -222,6 +222,6 @@ func (h *handlers) cancelJob(c fiber.Ctx) error {
 	case err != nil:
 		return utils.ReportError(c, err.Error(), fiber.StatusConflict)
 	default:
-		return c.JSON(fiber.Map{"status": "ok", "message": successMessage})
+		return c.JSON(fiber.Map{statusField: "ok", "message": successMessage})
 	}
 }

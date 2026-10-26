@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -389,7 +390,7 @@ func (m *jobManager) sweepLocked(now time.Time) {
 func newJobID() string {
 	raw := make([]byte, 8)
 	if _, err := rand.Read(raw); err != nil {
-		return fmt.Sprintf("%d", time.Now().UnixNano())
+		return strconv.FormatInt(time.Now().UnixNano(), 10)
 	}
 	return hex.EncodeToString(raw)
 }

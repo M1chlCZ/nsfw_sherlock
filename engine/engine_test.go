@@ -776,7 +776,12 @@ func TestAnalyzeWithRejectsInvalidSensitivity(t *testing.T) {
 func TestAnalyzeWithRejectsNonFiniteSensitivity(t *testing.T) {
 	eng := &Engine{}
 	for _, value := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-		if _, err := eng.AnalyzeWith(context.Background(), nil, AnalyzeOptions{Sensitivity: value}); !errors.Is(err, ErrInvalidSensitivity) {
+		_, err := eng.AnalyzeWith(
+			context.Background(),
+			nil,
+			AnalyzeOptions{Sensitivity: value},
+		)
+		if !errors.Is(err, ErrInvalidSensitivity) {
 			t.Fatalf("sensitivity %v: err = %v, want ErrInvalidSensitivity", value, err)
 		}
 	}
