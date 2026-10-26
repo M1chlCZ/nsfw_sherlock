@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -204,8 +205,31 @@ func deriveRules(entries []modelEntry) DetectionRules {
 	return rules
 }
 
+// AnalyzeOptions controls one AnalyzeWith call.
+type AnalyzeOptions struct {
+	Sensitivity float64
+}
+
+// ErrInvalidSensitivity reports a sensitivity outside 0.1..10.
+var ErrInvalidSensitivity = errors.New("engine: sensitivity must be between 0.1 and 10")
+
 // Analyze decodes data, runs every loaded model concurrently, and combines their outputs.
 func (e *Engine) Analyze(ctx context.Context, data []byte) (Analysis, error) {
+	return e.AnalyzeWith(ctx, data, AnalyzeOptions{})
+}
+
+// AnalyzeWith is Analyze with explicit options.
+func (e *Engine) AnalyzeWith(ctx context.Context, data []byte, opts AnalyzeOptions) (Analysis, error) {
+	sensitivity := opts.Sensitivity
+	if math.IsNaN(sensitivity) || math.IsInf(sensitivity, 0) {
+		return Analysis{}, ErrInvalidSensitivity
+	}
+	if sensitivity == 0 {
+		sensitivity = 1
+	}
+	if sensitivity < 0.1 || sensitivity > 10 {
+		return Analysis{}, ErrInvalidSensitivity
+	}
 	if err := ctx.Err(); err != nil {
 		return Analysis{}, err
 	}
@@ -271,7 +295,7 @@ func (e *Engine) Analyze(ctx context.Context, data []byte) (Analysis, error) {
 		dets = append(dets, results[i].dets...)
 	}
 
-	analysis := Combine(e.profile, outputs, dets, e.rules)
+	analysis := CombineWith(e.profile, outputs, dets, e.rules, sensitivity)
 	analysis.Models = make([]ModelInfo, 0, len(e.entries))
 	for _, entry := range e.entries {
 		analysis.Models = append(analysis.Models, ModelInfo{

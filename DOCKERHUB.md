@@ -34,15 +34,24 @@ All image endpoints accept this JSON request:
 {"base64":"<base64-encoded image>","filename":"image.jpg"}
 ```
 
+Set `sensitivity` between 0.1 and 10 to change the decision thresholds. Higher values flag more images. The default is 1. The gRPC requests have the same field.
+
+With `API_KEYS`, every image endpoint requires the key in the `X-API-Key` header. `/ping` and `/metrics` stay open.
+
 | HTTP endpoint | Response |
 | --- | --- |
 | `GET /ping` | Service status |
+| `GET /metrics` | Prometheus metrics |
 | `POST /pic/check` | `nsfwPic` and `nsfwText` flags |
 | `POST /pic/labels` | Probabilities for `drawings`, `hentai`, `neutral`, `porn`, and `sexy` |
 | `POST /pic/analyze` | Full analysis, model scores, region detections, and elapsed time |
 | `POST /pic/batch` | One `/pic/check` result per image, up to `BATCH_MAX_IMAGES` |
 | `POST /pic/upload` | Raw image bytes as the request body; the same body as `/pic/check` |
 | `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
+| `GET /ready` | Readiness probe; reports whether video scanning is available |
+| `POST /jobs` | Start a background batch or video analysis |
+| `GET /jobs/{id}` | Job state and result |
+| `DELETE /jobs/{id}` | Cancel a queued job or a running analysis |
 
 Example response from `/pic/check`:
 
@@ -75,6 +84,10 @@ When `CACHE_ENTRIES` is greater than 0, the service stores responses for identic
 
 Send a video as a multipart `file` field to `/video/check`; the response holds one analysis per sampled frame and a summary. The image endpoints also accept raw bytes at `/pic/upload`. The Docker image includes ffmpeg.
 
+Large batches and videos can run in the background through `/jobs`: submit, poll `GET /jobs/{id}` for the state and result, and cancel with `DELETE /jobs/{id}`. Two jobs run at once and results stay for ten minutes.
+
+Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
+
 Errors use this shape:
 
 ```json
@@ -82,6 +95,7 @@ Errors use this shape:
 ```
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
+It also serves the standard gRPC health service and server reflection.
 The [service definition](https://github.com/M1chlCZ/nsfw_sherlock/blob/main/proto/nsfw.proto) contains the request and response types.
 
 ## GPU support
@@ -89,7 +103,7 @@ The [service definition](https://github.com/M1chlCZ/nsfw_sherlock/blob/main/prot
 ### NVIDIA · CUDA
 
 Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Toolkit.
-CUDA images are tagged with a `-cuda` suffix, for example `v1.1.0-cuda` and `latest-cuda`.
+CUDA images are tagged with a `-cuda` suffix, for example `v1.2.0-cuda` and `latest-cuda`.
 
 ```sh
 docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:latest-cuda
@@ -128,6 +142,8 @@ If the selected provider is unavailable, the service stops at startup. Unsupport
 | `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, `migraphx`, `tensorrt`, or `openvino`. `rocm` aliases `migraphx`. |
 | `ORT_DEVICE_ID` | `0` | GPU index |
 | `OCR_ENABLED` | `true` | Text detection. Requires a build with OCR support. |
+| `API_KEYS` | (none) | Comma-separated keys for the `X-API-Key` header. Empty disables the check. |
+| `RATE_LIMIT_RPM` | `0` | Requests per minute for each key or IP. `0` disables the limit. |
 | `MODELS_DIR` | `./assets/models` | Model directory |
 | `MANIFEST` | `models/manifest.json` | Model manifest |
 | `ORT_LIB` | Auto-detected | ONNX Runtime shared library path |

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
+	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -746,5 +747,37 @@ func TestClose(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Errorf("Close() called %d closers, want 2", calls)
+	}
+}
+
+func TestAnalyzeWithRejectsInvalidSensitivity(t *testing.T) {
+	withBuildEntry(t, func(m Model, opts Options) (modelEntry, func() error, error) {
+		return stubEntry(m.ID), nil, nil
+	})
+	e, err := NewEngine(stubManifest(stubModel("good", false)), Options{Log: discardLogger()})
+	if err != nil {
+		t.Fatalf("NewEngine() error = %v, want nil", err)
+	}
+	for _, sensitivity := range []float64{0.05, 11} {
+		_, err := e.AnalyzeWith(
+			context.Background(),
+			quadPNG(t),
+			AnalyzeOptions{Sensitivity: sensitivity},
+		)
+		if !errors.Is(err, ErrInvalidSensitivity) {
+			t.Fatalf("AnalyzeWith(sensitivity %v) error = %v, want ErrInvalidSensitivity", sensitivity, err)
+		}
+	}
+	if _, err := e.AnalyzeWith(context.Background(), quadPNG(t), AnalyzeOptions{Sensitivity: 2}); err != nil {
+		t.Fatalf("AnalyzeWith(sensitivity 2) error = %v, want nil", err)
+	}
+}
+
+func TestAnalyzeWithRejectsNonFiniteSensitivity(t *testing.T) {
+	eng := &Engine{}
+	for _, value := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if _, err := eng.AnalyzeWith(context.Background(), nil, AnalyzeOptions{Sensitivity: value}); !errors.Is(err, ErrInvalidSensitivity) {
+			t.Fatalf("sensitivity %v: err = %v, want ErrInvalidSensitivity", value, err)
+		}
 	}
 }

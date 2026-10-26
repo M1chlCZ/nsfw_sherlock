@@ -62,15 +62,24 @@ All image endpoints accept this JSON request:
 {"base64":"<base64-encoded image>","filename":"image.jpg"}
 ```
 
+Set `sensitivity` between 0.1 and 10 to change the decision thresholds. Higher values flag more images. The default is 1. The gRPC requests have the same field.
+
+With `API_KEYS`, every image endpoint requires the key in the `X-API-Key` header. `/ping` and `/metrics` stay open.
+
 | HTTP endpoint | Response |
 | --- | --- |
 | `GET /ping` | Service status |
+| `GET /metrics` | Prometheus metrics |
 | `POST /pic/check` | `nsfwPic` and `nsfwText` flags |
 | `POST /pic/labels` | Probabilities for `drawings`, `hentai`, `neutral`, `porn`, and `sexy` |
 | `POST /pic/analyze` | Full analysis, model scores, region detections, and elapsed time |
 | `POST /pic/batch` | One `/pic/check` result per image, up to `BATCH_MAX_IMAGES` |
 | `POST /pic/upload` | Raw image bytes as the request body; the same body as `/pic/check` |
 | `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
+| `GET /ready` | Readiness probe; reports whether video scanning is available |
+| `POST /jobs` | Start a background batch or video analysis |
+| `GET /jobs/{id}` | Job state and result |
+| `DELETE /jobs/{id}` | Cancel a queued job or a running analysis |
 
 Example response from `/pic/check`:
 
@@ -104,7 +113,29 @@ ffmpeg on the host, or use the Docker image, which includes it. Without ffmpeg
 the endpoint answers 503. Uploads are limited to `VIDEO_MAX_BYTES` and the
 whole scan stops after 120 seconds.
 
+Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
+
+### Async jobs
+
+Large batches and videos can run in the background. `POST /jobs` accepts the
+same JSON body as `/pic/batch`, or a multipart video in the `file` field:
+
+```sh
+curl -fsS -X POST http://localhost:4000/jobs \
+  -H "Content-Type: application/json" -d '{"images":[...]}'
+curl -fsS -F "file=@clip.mp4" http://localhost:4000/jobs
+```
+
+The service answers 202 with a job id. Poll `GET /jobs/{id}` for the state
+(`queued`, `running`, `done`, `failed` or `canceled`) and the result.
+`DELETE /jobs/{id}` cancels a queued job or a running analysis. Two jobs run at
+once, results stay for ten minutes, and up to 64 jobs are kept.
+
+The `nsfw_request_duration_seconds` histogram carries an `endpoint` label, and
+`GET /ready` reports whether video scanning is available.
+
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
+It also serves the standard gRPC health service and server reflection.
 The [service definition](proto/nsfw.proto) contains the request and response types.
 
 ## GPU support
@@ -115,7 +146,7 @@ Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Tool
 Then run the CUDA image:
 
 ```sh
-docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.1.0-cuda
+docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.2.0-cuda
 ```
 
 This image supports Linux amd64. It includes ONNX Runtime 1.29.0, CUDA 12, and cuDNN.
@@ -147,7 +178,7 @@ OpenVINO runs on an Intel CPU or GPU.
 
 If the selected provider is unavailable, the service stops at startup.
 Unsupported operators can still use the CPU.
-**The GPU execution providers remain untested on physical hardware.**
+The v1.0.5 Linux amd64 binary passed a physical CUDA test on an RTX 5070 Ti under WSL2, with ONNX Runtime 1.29.0, CUDA 13 and cuDNN 9.24. See the [test setup, results and reproduction client](https://gist.github.com/M1chlCZ/35c5a7b94e729b8a6e9403b739981c79). This test does not cover the CUDA 12 Docker image, AMD/MIGraphX, TensorRT or OpenVINO.
 
 ## Configuration
 
@@ -159,6 +190,8 @@ Unsupported operators can still use the CPU.
 | `ORT_PROVIDER` | `cpu` | `cpu`, `cuda`, `migraphx`, `tensorrt`, or `openvino`. `rocm` aliases `migraphx`. |
 | `ORT_DEVICE_ID` | `0` | GPU index |
 | `OCR_ENABLED` | `true` | Text detection. Requires a build with OCR support. |
+| `API_KEYS` | (none) | Comma-separated keys for the `X-API-Key` header. Empty disables the check. |
+| `RATE_LIMIT_RPM` | `0` | Requests per minute for each key or IP. `0` disables the limit. |
 
 <details>
 <summary>Paths, limits, and logging</summary>

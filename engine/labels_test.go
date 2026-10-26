@@ -65,3 +65,13 @@ func TestIsNSFWAndGetLabels(t *testing.T) {
 		t.Errorf("GetLabels() = %+v, want %+v", got, l)
 	}
 }
+
+func TestNSFWScaledKeepsDecisionsMonotonic(t *testing.T) {
+	image := Labels{Drawings: 0.6, Hentai: 0.25, Neutral: 0.1, Porn: 0.025, Sexy: 0.025}
+	if !image.nsfwScaled(1) {
+		t.Fatal("base sensitivity must flag the image")
+	}
+	if !image.nsfwScaled(1.5) {
+		t.Fatal("higher sensitivity must keep the image flagged")
+	}
+}
