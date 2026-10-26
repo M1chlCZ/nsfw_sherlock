@@ -129,7 +129,12 @@ func (m *metricsState) render() string {
 	}
 	sort.Strings(endpoints)
 	for _, endpoint := range endpoints {
-		writeHistogram(&b, "nsfw_request_duration_seconds", fmt.Sprintf("endpoint=%q,", endpoint), m.histograms[endpoint])
+		writeHistogram(
+			&b,
+			"nsfw_request_duration_seconds",
+			fmt.Sprintf("endpoint=%q,", endpoint),
+			m.histograms[endpoint],
+		)
 	}
 	b.WriteString("# HELP nsfw_verdicts_total Analyzed images per verdict.\n")
 	b.WriteString("# TYPE nsfw_verdicts_total counter\n")

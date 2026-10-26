@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -287,8 +288,8 @@ func (m *jobManager) list(state string, limit int) ([]jobView, map[string]int) {
 		counts[name] = 0
 	}
 	views := make([]jobView, 0, min(limit, len(m.jobs)))
-	for i := len(m.order) - 1; i >= 0; i-- {
-		entry, ok := m.jobs[m.order[i]]
+	for _, id := range slices.Backward(m.order) {
+		entry, ok := m.jobs[id]
 		if !ok {
 			continue
 		}

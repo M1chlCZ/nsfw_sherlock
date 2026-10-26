@@ -185,7 +185,7 @@ func TestJobManagerListsNewestFirstAndCounts(t *testing.T) {
 		t.Fatalf("submit first: %v", err)
 	}
 	waitForJobState(t, manager, first.ID, jobRunning)
-	second, err := manager.submit("batch", func(context.Context) (any, error) { return nil, nil })
+	second, err := manager.submit("batch", func(context.Context) (any, error) { return "done", nil })
 	if err != nil {
 		t.Fatalf("submit second: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestJobManagerSubscribesToStateChanges(t *testing.T) {
 	releaseFirst := make(chan struct{})
 	first, err := manager.submit("batch", func(context.Context) (any, error) {
 		<-releaseFirst
-		return nil, nil
+		return "done", nil
 	})
 	if err != nil {
 		t.Fatalf("submit first: %v", err)
@@ -289,7 +289,7 @@ func TestJobManagerUnsubscribeClosesTheChannel(t *testing.T) {
 	defer close(release)
 	view, err := manager.submit("batch", func(context.Context) (any, error) {
 		<-release
-		return nil, nil
+		return "done", nil
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -311,13 +311,15 @@ func TestJobManagerWritesMetrics(t *testing.T) {
 	release := make(chan struct{})
 	blocking, err := manager.submit("batch", func(context.Context) (any, error) {
 		<-release
-		return nil, nil
+		return "done", nil
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
 	}
 	waitForJobState(t, manager, blocking.ID, jobRunning)
-	if _, err := manager.submit("batch", func(context.Context) (any, error) { return nil, nil }); !errors.Is(err, errJobFull) {
+	if _, err := manager.submit("batch", func(context.Context) (any, error) {
+		return "done", nil
+	}); !errors.Is(err, errJobFull) {
 		t.Fatalf("second submit = %v, want errJobFull", err)
 	}
 	var b strings.Builder
