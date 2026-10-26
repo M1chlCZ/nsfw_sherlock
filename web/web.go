@@ -49,15 +49,17 @@ type Analyzer interface {
 type TextChecker func(ctx context.Context, img []byte) (bool, error)
 
 type handlers struct {
-	analyzer      Analyzer
-	checker       TextChecker
-	timeout       time.Duration
-	batchMax      int
-	cache         *responseCache
-	metrics       *metricsState
-	video         video.Extractor
-	videoLimits   video.Limits
-	videoMaxBytes int64
+	analyzer       Analyzer
+	checker        TextChecker
+	timeout        time.Duration
+	batchMax       int
+	cache          *responseCache
+	metrics        *metricsState
+	video          video.Extractor
+	videoLimits    video.Limits
+	videoMaxBytes  int64
+	videoAvailable bool
+	jobs           *jobManager
 }
 
 // NewApp builds the HTTP application with the legacy routes and middleware.
@@ -90,7 +92,9 @@ func newApp(
 			MaxFrames: cfg.VideoMaxFrames,
 			MaxWidth:  videoMaxWidth,
 		},
-		videoMaxBytes: cfg.VideoMaxBytes,
+		videoMaxBytes:  cfg.VideoMaxBytes,
+		videoAvailable: ffmpegAvailable(cfg.FFmpegPath),
+		jobs:           newJobManager(baseCtx),
 	}
 	if cfg.CacheEntries > 0 {
 		h.cache = newResponseCache(cfg.CacheEntries)
@@ -126,6 +130,7 @@ func newApp(
 	}
 
 	app.Get("/ping", h.ping)
+	app.Get("/ready", h.ready)
 	app.Get(metricsPath, h.metrics.handle)
 	app.Post("/pic/check", limit, h.picCheck)
 	app.Post("/pic/labels", limit, h.picLabels)
@@ -133,6 +138,9 @@ func newApp(
 	app.Post("/pic/batch", limit, h.picBatch)
 	app.Post("/pic/upload", limit, h.picUpload)
 	app.Post("/video/check", limit, h.videoCheck)
+	app.Post("/jobs", limit, h.submitJob)
+	app.Get("/jobs/:id", h.getJob)
+	app.Delete("/jobs/:id", h.cancelJob)
 	return app
 }
 
@@ -182,6 +190,17 @@ func StartWebServer(
 
 func (h *handlers) ping(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "OK"})
+}
+
+type readyResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Video   bool   `json:"video"`
+}
+
+// ready reports that the API serves requests and whether video scanning is available.
+func (h *handlers) ready(c fiber.Ctx) error {
+	return c.JSON(readyResponse{Status: "ok", Message: successMessage, Video: h.videoAvailable})
 }
 
 type picRequest struct {
@@ -352,17 +371,25 @@ func (h *handlers) picBatch(c fiber.Ctx) error {
 			fiber.StatusBadRequest,
 		)
 	}
-	results := make([]any, len(req.Images))
-	g, gctx := errgroup.WithContext(c.Context())
+	return c.JSON(batchResponse{
+		Status:  "ok",
+		Message: successMessage,
+		Results: h.analyzeBatch(c.Context(), req.Images),
+	})
+}
+
+func (h *handlers) analyzeBatch(ctx context.Context, images []picRequest) []any {
+	results := make([]any, len(images))
+	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(min(h.batchMax, requestConcurrency))
-	for i := range req.Images {
+	for i := range images {
 		g.Go(func() error {
-			results[i] = h.checkOne(gctx, req.Images[i])
+			results[i] = h.checkOne(gctx, images[i])
 			return nil
 		})
 	}
 	_ = g.Wait()
-	return c.JSON(batchResponse{Status: "ok", Message: successMessage, Results: results})
+	return results
 }
 
 func (h *handlers) checkOne(ctx context.Context, req picRequest) any {
