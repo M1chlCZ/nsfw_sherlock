@@ -48,6 +48,10 @@ With `API_KEYS`, every image endpoint requires the key in the `X-API-Key` header
 | `POST /pic/batch` | One `/pic/check` result per image, up to `BATCH_MAX_IMAGES` |
 | `POST /pic/upload` | Raw image bytes as the request body; the same body as `/pic/check` |
 | `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
+| `GET /ready` | Readiness probe; reports whether video scanning is available |
+| `POST /jobs` | Start a background batch or video analysis |
+| `GET /jobs/{id}` | Job state and result |
+| `DELETE /jobs/{id}` | Cancel a queued job or a running analysis |
 
 Example response from `/pic/check`:
 
@@ -79,6 +83,8 @@ The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns o
 When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
 
 Send a video as a multipart `file` field to `/video/check`; the response holds one analysis per sampled frame and a summary. The image endpoints also accept raw bytes at `/pic/upload`. The Docker image includes ffmpeg.
+
+Large batches and videos can run in the background through `/jobs`: submit, poll `GET /jobs/{id}` for the state and result, and cancel with `DELETE /jobs/{id}`. Two jobs run at once and results stay for ten minutes.
 
 Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
 

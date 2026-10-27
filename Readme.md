@@ -76,6 +76,10 @@ With `API_KEYS`, every image endpoint requires the key in the `X-API-Key` header
 | `POST /pic/batch` | One `/pic/check` result per image, up to `BATCH_MAX_IMAGES` |
 | `POST /pic/upload` | Raw image bytes as the request body; the same body as `/pic/check` |
 | `POST /video/check` | Multipart video upload; one analysis per sampled frame and a summary |
+| `GET /ready` | Readiness probe; reports whether video scanning is available |
+| `POST /jobs` | Start a background batch or video analysis |
+| `GET /jobs/{id}` | Job state and result |
+| `DELETE /jobs/{id}` | Cancel a queued job or a running analysis |
 
 Example response from `/pic/check`:
 
@@ -110,6 +114,25 @@ the endpoint answers 503. Uploads are limited to `VIDEO_MAX_BYTES` and the
 whole scan stops after 120 seconds.
 
 Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
+
+### Async jobs
+
+Large batches and videos can run in the background. `POST /jobs` accepts the
+same JSON body as `/pic/batch`, or a multipart video in the `file` field:
+
+```sh
+curl -fsS -X POST http://localhost:4000/jobs \
+  -H "Content-Type: application/json" -d '{"images":[...]}'
+curl -fsS -F "file=@clip.mp4" http://localhost:4000/jobs
+```
+
+The service answers 202 with a job id. Poll `GET /jobs/{id}` for the state
+(`queued`, `running`, `done`, `failed` or `canceled`) and the result.
+`DELETE /jobs/{id}` cancels a queued job or a running analysis. Two jobs run at
+once, results stay for ten minutes, and up to 64 jobs are kept.
+
+The `nsfw_request_duration_seconds` histogram carries an `endpoint` label, and
+`GET /ready` reports whether video scanning is available.
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
 It also serves the standard gRPC health service and server reflection.
