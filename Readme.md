@@ -112,6 +112,7 @@ whole scan stops after 120 seconds.
 Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
+It also serves the standard gRPC health service and server reflection.
 The [service definition](proto/nsfw.proto) contains the request and response types.
 
 ## GPU support

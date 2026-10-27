@@ -89,6 +89,7 @@ Errors use this shape:
 ```
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
+It also serves the standard gRPC health service and server reflection.
 The [service definition](https://github.com/M1chlCZ/nsfw_sherlock/blob/main/proto/nsfw.proto) contains the request and response types.
 
 ## GPU support

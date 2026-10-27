@@ -15,6 +15,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
 
@@ -59,6 +62,10 @@ func StartGrpcServer(
 		grpc.ChainUnaryInterceptor(unaryInterceptors(log)...),
 	)
 	grpcModels.RegisterNSFWServer(server, NewServer(analyzer, checker, log))
+	healthServer := health.NewServer()
+	healthgrpc.RegisterHealthServer(server, healthServer)
+	healthServer.SetServingStatus("proto.NSFW", healthgrpc.HealthCheckResponse_SERVING)
+	reflection.Register(server)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- server.Serve(lis) }()
