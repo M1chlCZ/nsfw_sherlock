@@ -21,13 +21,14 @@ func TestMetricsRenderOnFreshState(t *testing.T) {
 	for _, want := range []string{
 		"# TYPE nsfw_requests_total counter",
 		"# TYPE nsfw_request_duration_seconds histogram",
-		`nsfw_request_duration_seconds_bucket{le="+Inf"} 0`,
-		"nsfw_request_duration_seconds_count 0",
 		"nsfw_inflight_requests 0",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render() lacks %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "nsfw_request_duration_seconds_count") {
+		t.Errorf("fresh metrics render a histogram:\n%s", out)
 	}
 }
 
@@ -62,7 +63,8 @@ func TestMetricsObserveRequestsAndVerdicts(t *testing.T) {
 		`nsfw_requests_total{endpoint="/pic/check",status="200"} 1`,
 		`nsfw_requests_total{endpoint="/pic/check",status="400"} 1`,
 		`nsfw_verdicts_total{verdict="sfw"} 1`,
-		"nsfw_request_duration_seconds_count 2",
+		`nsfw_request_duration_seconds_count{endpoint="/pic/check"} 2`,
+		`nsfw_request_duration_seconds_bucket{endpoint="/pic/check",le="+Inf"} 2`,
 		"nsfw_cache_entries 1",
 	} {
 		if !strings.Contains(out, want) {

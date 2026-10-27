@@ -17,21 +17,26 @@ var durationBuckets = [...]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 
 
 // metricsState gathers Prometheus metrics for the HTTP API.
 type metricsState struct {
-	mu       sync.Mutex
-	requests map[string]int64
-	verdicts map[string]int64
-	buckets  [len(durationBuckets)]int64
-	sum      float64
-	count    int64
-	inflight int64
-	cache    *responseCache
+	mu         sync.Mutex
+	requests   map[string]int64
+	verdicts   map[string]int64
+	histograms map[string]*latencyHistogram
+	inflight   int64
+	cache      *responseCache
+}
+
+type latencyHistogram struct {
+	buckets [len(durationBuckets)]int64
+	sum     float64
+	count   int64
 }
 
 func newMetricsState(cache *responseCache) *metricsState {
 	return &metricsState{
-		requests: make(map[string]int64),
-		verdicts: make(map[string]int64),
-		cache:    cache,
+		requests:   make(map[string]int64),
+		verdicts:   make(map[string]int64),
+		histograms: make(map[string]*latencyHistogram),
+		cache:      cache,
 	}
 }
 
@@ -69,13 +74,18 @@ func (m *metricsState) observe(endpoint string, status int, duration time.Durati
 	defer m.mu.Unlock()
 	m.inflight--
 	m.requests[endpoint+"\x00"+strconv.Itoa(status)]++
+	histogram := m.histograms[endpoint]
+	if histogram == nil {
+		histogram = &latencyHistogram{}
+		m.histograms[endpoint] = histogram
+	}
 	for i, bound := range durationBuckets {
 		if elapsed <= bound {
-			m.buckets[i]++
+			histogram.buckets[i]++
 		}
 	}
-	m.sum += elapsed
-	m.count++
+	histogram.sum += elapsed
+	histogram.count++
 }
 
 func (m *metricsState) observeVerdict(verdict string) {
@@ -99,17 +109,31 @@ func (m *metricsState) render() string {
 	}
 	b.WriteString("# HELP nsfw_request_duration_seconds Request duration in seconds.\n")
 	b.WriteString("# TYPE nsfw_request_duration_seconds histogram\n")
-	for i, bound := range durationBuckets {
+	endpoints := make([]string, 0, len(m.histograms))
+	for endpoint := range m.histograms {
+		endpoints = append(endpoints, endpoint)
+	}
+	sort.Strings(endpoints)
+	for _, endpoint := range endpoints {
+		histogram := m.histograms[endpoint]
+		for i, bound := range durationBuckets {
+			fmt.Fprintf(
+				&b,
+				"nsfw_request_duration_seconds_bucket{endpoint=%q,le=%q} %d\n",
+				endpoint,
+				strconv.FormatFloat(bound, 'g', -1, 64),
+				histogram.buckets[i],
+			)
+		}
 		fmt.Fprintf(
 			&b,
-			"nsfw_request_duration_seconds_bucket{le=%q} %d\n",
-			strconv.FormatFloat(bound, 'g', -1, 64),
-			m.buckets[i],
+			"nsfw_request_duration_seconds_bucket{endpoint=%q,le=\"+Inf\"} %d\n",
+			endpoint,
+			histogram.count,
 		)
+		fmt.Fprintf(&b, "nsfw_request_duration_seconds_sum{endpoint=%q} %g\n", endpoint, histogram.sum)
+		fmt.Fprintf(&b, "nsfw_request_duration_seconds_count{endpoint=%q} %d\n", endpoint, histogram.count)
 	}
-	fmt.Fprintf(&b, "nsfw_request_duration_seconds_bucket{le=\"+Inf\"} %d\n", m.count)
-	fmt.Fprintf(&b, "nsfw_request_duration_seconds_sum %g\n", m.sum)
-	fmt.Fprintf(&b, "nsfw_request_duration_seconds_count %d\n", m.count)
 	b.WriteString("# HELP nsfw_verdicts_total Analyzed images per verdict.\n")
 	b.WriteString("# TYPE nsfw_verdicts_total counter\n")
 	for _, verdict := range sortedKeys(m.verdicts) {
