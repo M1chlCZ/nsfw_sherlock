@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"mime/multipart"
 	"os"
 	"os/exec"
@@ -213,7 +214,8 @@ func sensitivityFromString(raw string) (float64, bool) {
 		return 0, true
 	}
 	value, err := strconv.ParseFloat(raw, 64)
-	if err != nil || value < 0.1 || value > 10 {
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) ||
+		value < 0.1 || value > 10 {
 		return 0, false
 	}
 	return value, true

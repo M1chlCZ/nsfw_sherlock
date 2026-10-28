@@ -213,3 +213,37 @@ func TestReadyReportsVideoAvailability(t *testing.T) {
 		t.Errorf("body = %v", fields)
 	}
 }
+
+func TestCancelRunningBatchJob(t *testing.T) {
+	analyzer := &fakeAnalyzer{fn: func(ctx context.Context, data []byte) (engine.Analysis, error) {
+		<-ctx.Done()
+		return engine.Analysis{}, ctx.Err()
+	}}
+	app := testJobApp(t, analyzer)
+	payload := base64.StdEncoding.EncodeToString([]byte("fake-image-bytes"))
+	status, body := doRequest(t, app, http.MethodPost, "/jobs", `{"images":[{"base64":"`+payload+`"}]}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body: %s", status, body)
+	}
+	job := decodeJSON(t, body)["job"].(map[string]any)
+	id := job["id"].(string)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		status, body = doRequest(t, app, http.MethodGet, "/jobs/"+id, "")
+		if status != http.StatusOK {
+			t.Fatalf("GET job status = %d; body: %s", status, body)
+		}
+		if decodeJSON(t, body)["job"].(map[string]any)["state"] == "running" {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	status, body = doRequest(t, app, http.MethodDelete, "/jobs/"+id, "")
+	if status != http.StatusOK {
+		t.Fatalf("cancel status = %d; body: %s", status, body)
+	}
+	done := waitForHTTPJob(t, app, id)
+	if done["state"] != "canceled" {
+		t.Fatalf("state = %v, want canceled", done["state"])
+	}
+}

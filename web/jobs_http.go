@@ -45,7 +45,8 @@ func (h *handlers) submitBatchJob(c fiber.Ctx) error {
 		)
 	}
 	view, err := h.jobs.submit("batch", func(ctx context.Context) (any, error) {
-		return h.analyzeBatch(ctx, req.Images), nil
+		results := h.analyzeBatch(ctx, req.Images)
+		return results, ctx.Err()
 	})
 	if err != nil {
 		return utils.ReportError(c, err.Error(), fiber.StatusTooManyRequests)
@@ -73,8 +74,7 @@ func (h *handlers) submitVideoJob(c fiber.Ctx) error {
 	if err != nil {
 		return utils.ReportError(c, "the upload could not be stored", fiber.StatusBadRequest)
 	}
-	view, err := h.jobs.submit("video", func(ctx context.Context) (any, error) {
-		defer func() { _ = os.Remove(name) }()
+	view, err := h.jobs.submitWithCleanup("video", func(ctx context.Context) (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, videoAnalyzeTimeout)
 		defer cancel()
 		frames, err := h.video.Extract(ctx, name, h.videoLimits)
@@ -82,7 +82,7 @@ func (h *handlers) submitVideoJob(c fiber.Ctx) error {
 			return nil, err
 		}
 		return h.analyzeFrames(ctx, frames, sensitivity)
-	})
+	}, func() { _ = os.Remove(name) })
 	if err != nil {
 		_ = os.Remove(name)
 		return utils.ReportError(c, err.Error(), fiber.StatusTooManyRequests)

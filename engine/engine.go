@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -220,6 +221,9 @@ func (e *Engine) Analyze(ctx context.Context, data []byte) (Analysis, error) {
 // AnalyzeWith is Analyze with explicit options.
 func (e *Engine) AnalyzeWith(ctx context.Context, data []byte, opts AnalyzeOptions) (Analysis, error) {
 	sensitivity := opts.Sensitivity
+	if math.IsNaN(sensitivity) || math.IsInf(sensitivity, 0) {
+		return Analysis{}, ErrInvalidSensitivity
+	}
 	if sensitivity == 0 {
 		sensitivity = 1
 	}

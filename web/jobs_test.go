@@ -170,3 +170,50 @@ func TestNewJobIDIsUniqueHex(t *testing.T) {
 		t.Fatalf("id is not hex: %s", first)
 	}
 }
+
+func TestJobManagerRunsCleanupForCancelledQueuedJobs(t *testing.T) {
+	manager := newJobManager(context.Background())
+	release := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
+	blocking := func(context.Context) (any, error) {
+		<-release
+		return nil, nil
+	}
+	first, err := manager.submit("video", blocking)
+	if err != nil {
+		t.Fatalf("submit first: %v", err)
+	}
+	second, err := manager.submit("video", blocking)
+	if err != nil {
+		t.Fatalf("submit second: %v", err)
+	}
+	waitForJobState(t, manager, first.ID, jobRunning)
+	waitForJobState(t, manager, second.ID, jobRunning)
+
+	cleaned := make(chan struct{})
+	third, err := manager.submitWithCleanup(
+		"video",
+		blocking,
+		func() { close(cleaned) },
+	)
+	if err != nil {
+		t.Fatalf("submit third: %v", err)
+	}
+	if err := manager.cancel(third.ID); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	waitForJobState(t, manager, third.ID, jobCanceled)
+
+	close(release)
+	released = true
+	select {
+	case <-cleaned:
+	case <-time.After(time.Second):
+		t.Fatal("cleanup did not run for a cancelled queued job")
+	}
+}

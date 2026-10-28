@@ -280,6 +280,12 @@ func TestSensitivityFromString(t *testing.T) {
 	if _, ok := sensitivityFromString("fast"); ok {
 		t.Errorf("text accepted")
 	}
+	if _, ok := sensitivityFromString("NaN"); ok {
+		t.Errorf("NaN accepted")
+	}
+	if _, ok := sensitivityFromString("Inf"); ok {
+		t.Errorf("Inf accepted")
+	}
 }
 
 func TestSummarizeVideoDefaultsToSFW(t *testing.T) {

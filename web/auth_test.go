@@ -68,7 +68,7 @@ func TestAPIKeyGuardDisabled(t *testing.T) {
 }
 
 func TestRateLimiterAllowAndRollover(t *testing.T) {
-	limiter := newRateLimiter(2)
+	limiter := newRateLimiter(2, true)
 	now := time.Now()
 	for i := range 2 {
 		if ok, _ := limiter.allow("k", now); !ok {
@@ -117,5 +117,60 @@ func TestRateLimitMiddleware(t *testing.T) {
 	}
 	if status, _, err := send(app, newJSONRequest(http.MethodGet, "/ping", "")); err != nil || status != http.StatusOK {
 		t.Fatalf("/ping status = %d, err = %v, want 200 outside the limit", status, err)
+	}
+}
+
+func TestRateLimitIgnoresKeysWhenAuthIsDisabled(t *testing.T) {
+	image := []byte("fake-image-bytes")
+	payload := base64.StdEncoding.EncodeToString(image)
+	app := NewApp(
+		config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 4, RateLimitRPM: 1},
+		&fakeAnalyzer{},
+		nil,
+		testLogger(),
+	)
+
+	for i := range 2 {
+		req := newJSONRequest(http.MethodPost, "/pic/check", picBody(payload, "a.png"))
+		req.Header.Set("X-API-Key", "rotating-"+string(rune('a'+i)))
+		status, body, err := send(app, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := http.StatusOK
+		if i == 1 {
+			want = http.StatusTooManyRequests
+		}
+		if status != want {
+			t.Fatalf("request %d status = %d, want %d; body: %s", i+1, status, want, body)
+		}
+	}
+}
+
+func TestRateLimitUsesKeysWhenAuthIsEnabled(t *testing.T) {
+	image := []byte("fake-image-bytes")
+	payload := base64.StdEncoding.EncodeToString(image)
+	app := NewApp(
+		config.Config{
+			MaxImageBytes:  1 << 20,
+			BatchMaxImages: 4,
+			RateLimitRPM:   1,
+			APIKeys:        []string{"key-one", "key-two"},
+		},
+		&fakeAnalyzer{},
+		nil,
+		testLogger(),
+	)
+
+	for _, key := range []string{"key-one", "key-two"} {
+		req := newJSONRequest(http.MethodPost, "/pic/check", picBody(payload, "a.png"))
+		req.Header.Set("X-API-Key", key)
+		status, body, err := send(app, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status != http.StatusOK {
+			t.Fatalf("key %s status = %d, want 200; body: %s", key, status, body)
+		}
 	}
 }

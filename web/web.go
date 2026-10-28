@@ -126,7 +126,7 @@ func newApp(
 		app.Use(guard)
 	}
 	if cfg.RateLimitRPM > 0 {
-		app.Use(rateLimitMiddleware(newRateLimiter(cfg.RateLimitRPM)))
+		app.Use(rateLimitMiddleware(newRateLimiter(cfg.RateLimitRPM, len(cfg.APIKeys) > 0)))
 	}
 
 	app.Get("/ping", h.ping)
@@ -334,7 +334,9 @@ func (h *handlers) picData(c fiber.Ctx) ([]byte, float64, bool) {
 		_ = utils.ReportError(c, "Bad Request", fiber.StatusBadRequest)
 		return nil, 0, false
 	}
-	if req.Sensitivity != 0 && (req.Sensitivity < 0.1 || req.Sensitivity > 10) {
+	if req.Sensitivity != 0 &&
+		(math.IsNaN(req.Sensitivity) || math.IsInf(req.Sensitivity, 0) ||
+			req.Sensitivity < 0.1 || req.Sensitivity > 10) {
 		_ = utils.ReportError(c, "sensitivity must be between 0.1 and 10", fiber.StatusBadRequest)
 		return nil, 0, false
 	}
@@ -396,7 +398,9 @@ func (h *handlers) checkOne(ctx context.Context, req picRequest) any {
 	if req.Base64 == "" {
 		return utils.ErrorResult("Bad Request")
 	}
-	if req.Sensitivity != 0 && (req.Sensitivity < 0.1 || req.Sensitivity > 10) {
+	if req.Sensitivity != 0 &&
+		(math.IsNaN(req.Sensitivity) || math.IsInf(req.Sensitivity, 0) ||
+			req.Sensitivity < 0.1 || req.Sensitivity > 10) {
 		return utils.ErrorResult("sensitivity must be between 0.1 and 10")
 	}
 	data, err := utils.DecodePayload(req.Base64)
@@ -448,6 +452,8 @@ func analyzeErrorStatus(err error) int {
 		return fiber.StatusBadRequest
 	case errors.Is(err, context.DeadlineExceeded):
 		return fiber.StatusGatewayTimeout
+	case errors.Is(err, engine.ErrInvalidSensitivity):
+		return fiber.StatusBadRequest
 	default:
 		return fiber.StatusInternalServerError
 	}

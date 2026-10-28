@@ -34,11 +34,10 @@ func (l *Labels) nsfwScaled(scale float32) bool {
 	if scale <= 0 {
 		scale = 1
 	}
-	gate := LegacyThresholdSafe / scale
 	minor := float32(0.1) / scale
 	hentai := float32(0.2) / scale
-	if l.Neutral > gate || l.Drawings > gate {
-		if l.Porn < minor && l.Sexy < minor {
+	if l.Neutral > LegacyThresholdSafe || l.Drawings > LegacyThresholdSafe {
+		if l.Porn < 0.1 && l.Sexy < 0.1 {
 			return false
 		}
 		return true

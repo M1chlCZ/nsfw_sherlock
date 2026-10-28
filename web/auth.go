@@ -46,10 +46,11 @@ func apiKeyGuard(keys []string) fiber.Handler {
 }
 
 type rateLimiter struct {
-	mu      sync.Mutex
-	limit   int
-	window  time.Duration
-	buckets map[string]*rateBucket
+	mu         sync.Mutex
+	limit      int
+	window     time.Duration
+	apiKeyAuth bool
+	buckets    map[string]*rateBucket
 }
 
 type rateBucket struct {
@@ -57,8 +58,13 @@ type rateBucket struct {
 	count int
 }
 
-func newRateLimiter(limit int) *rateLimiter {
-	return &rateLimiter{limit: limit, window: rateLimitWindow, buckets: make(map[string]*rateBucket)}
+func newRateLimiter(limit int, apiKeyAuth bool) *rateLimiter {
+	return &rateLimiter{
+		limit:      limit,
+		window:     rateLimitWindow,
+		apiKeyAuth: apiKeyAuth,
+		buckets:    make(map[string]*rateBucket),
+	}
 }
 
 func (l *rateLimiter) allow(key string, now time.Time) (bool, int) {
@@ -93,12 +99,12 @@ func rateLimitMiddleware(l *rateLimiter) fiber.Handler {
 		if authExempt(c) {
 			return c.Next()
 		}
-		var key string
-		if apiKey := c.Get(authHeaderName); apiKey != "" {
-			sum := sha256.Sum256([]byte(apiKey))
-			key = "k:" + hex.EncodeToString(sum[:])
-		} else {
-			key = "ip:" + c.IP()
+		key := "ip:" + c.IP()
+		if l.apiKeyAuth {
+			if apiKey := c.Get(authHeaderName); apiKey != "" {
+				sum := sha256.Sum256([]byte(apiKey))
+				key = "k:" + hex.EncodeToString(sum[:])
+			}
 		}
 		ok, retry := l.allow(key, time.Now())
 		if !ok {

@@ -40,6 +40,7 @@ type job struct {
 	result   any
 	err      string
 	cancel   context.CancelFunc
+	cleanup  func()
 }
 
 // jobView is the JSON shape of one job.
@@ -95,6 +96,16 @@ func newJobManager(baseCtx context.Context) *jobManager {
 
 // submit registers a job and starts it in the background.
 func (m *jobManager) submit(kind string, work jobWork) (jobView, error) {
+	return m.submitWithCleanup(kind, work, nil)
+}
+
+// submitWithCleanup is submit with a callback that runs when the job ends,
+// even when a queued job is cancelled before its work starts.
+func (m *jobManager) submitWithCleanup(
+	kind string,
+	work jobWork,
+	cleanup func(),
+) (jobView, error) {
 	m.mu.Lock()
 	m.sweepLocked(time.Now())
 	if len(m.jobs) >= m.max {
@@ -108,6 +119,7 @@ func (m *jobManager) submit(kind string, work jobWork) (jobView, error) {
 		state:   jobQueued,
 		created: time.Now(),
 		cancel:  cancel,
+		cleanup: cleanup,
 	}
 	m.jobs[entry.id] = entry
 	m.order = append(m.order, entry.id)
@@ -119,7 +131,19 @@ func (m *jobManager) submit(kind string, work jobWork) (jobView, error) {
 
 func (m *jobManager) run(ctx context.Context, entry *job, work jobWork) {
 	m.workers <- struct{}{}
-	defer func() { <-m.workers }()
+	defer func() {
+		<-m.workers
+		if entry.cancel != nil {
+			entry.cancel()
+		}
+		m.mu.Lock()
+		cleanup := entry.cleanup
+		entry.cleanup = nil
+		m.mu.Unlock()
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
 	m.mu.Lock()
 	if entry.state == jobCanceled {
 		m.mu.Unlock()

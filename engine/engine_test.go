@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
+	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -769,5 +770,14 @@ func TestAnalyzeWithRejectsInvalidSensitivity(t *testing.T) {
 	}
 	if _, err := e.AnalyzeWith(context.Background(), quadPNG(t), AnalyzeOptions{Sensitivity: 2}); err != nil {
 		t.Fatalf("AnalyzeWith(sensitivity 2) error = %v, want nil", err)
+	}
+}
+
+func TestAnalyzeWithRejectsNonFiniteSensitivity(t *testing.T) {
+	eng := &Engine{}
+	for _, value := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if _, err := eng.AnalyzeWith(context.Background(), nil, AnalyzeOptions{Sensitivity: value}); !errors.Is(err, ErrInvalidSensitivity) {
+			t.Fatalf("sensitivity %v: err = %v, want ErrInvalidSensitivity", value, err)
+		}
 	}
 }
