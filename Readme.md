@@ -178,7 +178,7 @@ OpenVINO runs on an Intel CPU or GPU.
 
 If the selected provider is unavailable, the service stops at startup.
 Unsupported operators can still use the CPU.
-**The GPU execution providers remain untested on physical hardware.**
+The v1.0.5 Linux amd64 binary passed a physical CUDA test on an RTX 5070 Ti under WSL2, with ONNX Runtime 1.29.0, CUDA 13 and cuDNN 9.24. See the [test setup, results and reproduction client](https://gist.github.com/M1chlCZ/35c5a7b94e729b8a6e9403b739981c79). This test does not cover the CUDA 12 Docker image, AMD/MIGraphX, TensorRT or OpenVINO.
 
 ## Configuration
 
