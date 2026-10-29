@@ -20,7 +20,7 @@ RUN if [ -n "$MODELS_BASE_URL" ]; then \
     fi \
     && bash scripts/fetch-models.sh --dir /models --manifest /models/manifest.json
 
-FROM golang:1.27-bookworm AS builder
+FROM golang:1.27.3-bookworm AS builder
 
 ARG VERSION=dev
 
