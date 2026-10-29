@@ -71,7 +71,7 @@ jobs:
         run: |
           set -eux
           if ! gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            git fetch -q --tags origin
+            git fetch -q --tags --force origin
             prev=$(git tag --sort=-creatordate | grep -E '^v[0-9]' | grep -v -x "$GITHUB_REF_NAME" | head -1 || true)
             {
               if [ -n "$prev" ]; then
