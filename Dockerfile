@@ -55,12 +55,12 @@ RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
       amd64/cuda12) ort_arch=x64-gpu_cuda12; ort_sha="$ORT_SHA256_CUDA12" ;; \
       *) echo "unsupported architecture/runtime: $arch/$ORT_VARIANT" >&2; exit 1 ;; \
     esac \
-    && curl -fsSL -o /tmp/ort.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.29.0/onnxruntime-linux-${ort_arch}-1.29.0.tgz" \
+    && curl -fsSL -o /tmp/ort.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-${ort_arch}-1.31.1.tgz" \
     && printf '%s  %s\n' "$ort_sha" /tmp/ort.tgz | sha256sum -c - \
     && tar -xzf /tmp/ort.tgz -C /tmp \
     && mkdir -p /app/lib \
-    && cp -P "/tmp/onnxruntime-linux-${ort_arch}-1.29.0/lib/"*.so* /app/lib/ \
-    && rm -rf /tmp/ort.tgz "/tmp/onnxruntime-linux-${ort_arch}-1.29.0"
+    && cp -P "/tmp/onnxruntime-linux-${ort_arch}-1.31.1/lib/"*.so* /app/lib/ \
+    && rm -rf /tmp/ort.tgz "/tmp/onnxruntime-linux-${ort_arch}-1.31.1"
 
 RUN useradd -r -u 10001 appuser
 
