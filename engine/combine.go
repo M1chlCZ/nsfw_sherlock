@@ -62,10 +62,26 @@ type Analysis struct {
 	ElapsedMs  int64             `json:"elapsedMs"`
 
 	explicitDetection bool
+	sensitivity       float64
 }
 
 // Combine reduces per-model scores and detector boxes to the legacy five-label set, a verdict, and the scalar /pic/analyze fields.
 func Combine(profile string, outputs []ModelOutput, dets []Detection, rules DetectionRules) Analysis {
+	return CombineWith(profile, outputs, dets, rules, 1)
+}
+
+// CombineWith is Combine with a sensitivity override: higher values flag more images.
+func CombineWith(
+	profile string,
+	outputs []ModelOutput,
+	dets []Detection,
+	rules DetectionRules,
+	sensitivity float64,
+) Analysis {
+	if sensitivity <= 0 {
+		sensitivity = 1
+	}
+	scale := float32(sensitivity)
 	var labels Labels
 	var photo, anime *ClassifierOutput
 	var animeR15 float32
@@ -129,13 +145,13 @@ func Combine(profile string, outputs []ModelOutput, dets []Detection, rules Dete
 
 	verdict := VerdictSFW
 	switch {
-	case labels.Porn >= ThresholdPornExplicit ||
-		labels.Hentai >= ThresholdHentaiExplicit ||
-		detExplicit >= ThresholdDetectionExplicit:
+	case labels.Porn >= ThresholdPornExplicit/scale ||
+		labels.Hentai >= ThresholdHentaiExplicit/scale ||
+		detExplicit >= ThresholdDetectionExplicit/scale:
 		verdict = VerdictExplicit
-	case labels.Sexy >= ThresholdSexySuggestive ||
-		animeR15 >= ThresholdAnimeR15Suggestive ||
-		detSuggestive >= ThresholdDetectionSuggestive:
+	case labels.Sexy >= ThresholdSexySuggestive/scale ||
+		animeR15 >= ThresholdAnimeR15Suggestive/scale ||
+		detSuggestive >= ThresholdDetectionSuggestive/scale:
 		verdict = VerdictSuggestive
 	}
 
@@ -148,15 +164,24 @@ func Combine(profile string, outputs []ModelOutput, dets []Detection, rules Dete
 		Photo:             photo,
 		Anime:             anime,
 		Detections:        detections,
-		explicitDetection: detExplicit >= ThresholdDetectionExplicit,
+		explicitDetection: detExplicit >= ThresholdDetectionExplicit/scale,
+		sensitivity:       sensitivity,
 	}
 }
 
 // LegacyNSFW reproduces the legacy /pic/check boolean: the original Labels.NSFW thresholds, an explicit hentai label, or an explicit-class detection at the explicit threshold.
 func (a Analysis) LegacyNSFW() bool {
-	return a.Labels.NSFW(LegacyThresholdSafe) ||
-		a.Labels.Hentai >= ThresholdHentaiExplicit ||
+	scale := float32(a.sensitivityOrOne())
+	return a.Labels.nsfwScaled(scale) ||
+		a.Labels.Hentai >= ThresholdHentaiExplicit/scale ||
 		a.explicitDetection
+}
+
+func (a Analysis) sensitivityOrOne() float64 {
+	if a.sensitivity <= 0 {
+		return 1
+	}
+	return a.sensitivity
 }
 
 func firstScore(scores map[string]float32, keys ...string) float32 {

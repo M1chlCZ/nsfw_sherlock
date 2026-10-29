@@ -20,11 +20,13 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v3/middleware/recover"
+	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	successMessage    = "success"
+	statusField       = "status"
 	serverTimeout     = 240 * time.Second
 	bodyLimitOverhead = 64 << 10
 	bodyLimitFloor    = 1 << 20
@@ -41,21 +43,24 @@ var (
 
 // Analyzer is the engine surface the HTTP API needs.
 type Analyzer interface {
-	Analyze(ctx context.Context, data []byte) (engine.Analysis, error)
+	AnalyzeWith(ctx context.Context, data []byte, opts engine.AnalyzeOptions) (engine.Analysis, error)
 }
 
 // TextChecker reports whether an encoded image contains bad words.
 type TextChecker func(ctx context.Context, img []byte) (bool, error)
 
 type handlers struct {
-	analyzer      Analyzer
-	checker       TextChecker
-	timeout       time.Duration
-	batchMax      int
-	cache         *responseCache
-	video         video.Extractor
-	videoLimits   video.Limits
-	videoMaxBytes int64
+	analyzer       Analyzer
+	checker        TextChecker
+	timeout        time.Duration
+	batchMax       int
+	cache          *responseCache
+	metrics        *metricsState
+	video          video.Extractor
+	videoLimits    video.Limits
+	videoMaxBytes  int64
+	videoAvailable bool
+	jobs           *jobManager
 }
 
 // NewApp builds the HTTP application with the legacy routes and middleware.
@@ -88,11 +93,14 @@ func newApp(
 			MaxFrames: cfg.VideoMaxFrames,
 			MaxWidth:  videoMaxWidth,
 		},
-		videoMaxBytes: cfg.VideoMaxBytes,
+		videoMaxBytes:  cfg.VideoMaxBytes,
+		videoAvailable: ffmpegAvailable(cfg.FFmpegPath),
+		jobs:           newJobManager(baseCtx),
 	}
 	if cfg.CacheEntries > 0 {
 		h.cache = newResponseCache(cfg.CacheEntries)
 	}
+	h.metrics = newMetricsState(h.cache)
 	limit := concurrencyLimiter(make(chan struct{}, requestConcurrency))
 	bodyLimit := batchBodyLimit(cfg.MaxImageBytes, h.batchMax)
 	if videoLimit := int(cfg.VideoMaxBytes) + bodyLimitOverhead; videoLimit > bodyLimit {
@@ -110,17 +118,30 @@ func newApp(
 		ErrorHandler:  errorHandler(log),
 	})
 	app.Use(requestContext(baseCtx))
+	app.Use(requestid.New())
 	app.Use(requestLogger(log))
 	app.Use(fiberrecover.New(fiberrecover.Config{EnableStackTrace: true}))
 	app.Use(cors.New())
+	app.Use(metricsMiddleware(h.metrics))
+	if guard := apiKeyGuard(cfg.APIKeys); guard != nil {
+		app.Use(guard)
+	}
+	if cfg.RateLimitRPM > 0 {
+		app.Use(rateLimitMiddleware(newRateLimiter(cfg.RateLimitRPM, len(cfg.APIKeys) > 0)))
+	}
 
 	app.Get("/ping", h.ping)
+	app.Get("/ready", h.ready)
+	app.Get(metricsPath, h.metrics.handle)
 	app.Post("/pic/check", limit, h.picCheck)
 	app.Post("/pic/labels", limit, h.picLabels)
 	app.Post("/pic/analyze", limit, h.picAnalyze)
 	app.Post("/pic/batch", limit, h.picBatch)
 	app.Post("/pic/upload", limit, h.picUpload)
 	app.Post("/video/check", limit, h.videoCheck)
+	app.Post("/jobs", limit, h.submitJob)
+	app.Get("/jobs/:id", h.getJob)
+	app.Delete("/jobs/:id", h.cancelJob)
 	return app
 }
 
@@ -169,12 +190,24 @@ func StartWebServer(
 }
 
 func (h *handlers) ping(c fiber.Ctx) error {
-	return c.JSON(fiber.Map{"status": "OK"})
+	return c.JSON(fiber.Map{statusField: "OK"})
+}
+
+type readyResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Video   bool   `json:"video"`
+}
+
+// ready reports that the API serves requests and whether video scanning is available.
+func (h *handlers) ready(c fiber.Ctx) error {
+	return c.JSON(readyResponse{Status: "ok", Message: successMessage, Video: h.videoAvailable})
 }
 
 type picRequest struct {
-	Base64   string `json:"base64"`
-	Filename string `json:"filename"`
+	Base64      string  `json:"base64"`
+	Filename    string  `json:"filename"`
+	Sensitivity float64 `json:"sensitivity"`
 }
 
 type checkResponse struct {
@@ -241,20 +274,21 @@ func (h *handlers) picAnalyze(c fiber.Ctx) error {
 }
 
 func (h *handlers) picAnalysis(c fiber.Ctx, endpoint string, build func(engine.Analysis, bool) any) error {
-	data, ok := h.picData(c)
+	data, sensitivity, ok := h.picData(c)
 	if !ok {
 		return nil
 	}
-	key := cacheKey(endpoint, data)
+	key := cacheKey(endpoint, sensitivity, data)
 	if h.cache != nil {
 		if body, hit := h.cache.get(key); hit {
 			return sendCachedJSON(c, body)
 		}
 	}
-	analysis, err := h.analyzeData(c.Context(), data)
+	analysis, err := h.analyzeData(c.Context(), data, sensitivity)
 	if err != nil {
 		return utils.ReportError(c, err.Error(), analyzeErrorStatus(err))
 	}
+	h.metrics.observeVerdict(analysis.Verdict)
 	nsfwText, err := h.textNSFW(c.Context(), data)
 	if err != nil {
 		return utils.ReportError(c, err.Error(), fiber.StatusInternalServerError)
@@ -262,10 +296,10 @@ func (h *handlers) picAnalysis(c fiber.Ctx, endpoint string, build func(engine.A
 	return h.sendJSON(c, key, build(analysis, nsfwText))
 }
 
-func (h *handlers) analyzeData(ctx context.Context, data []byte) (engine.Analysis, error) {
+func (h *handlers) analyzeData(ctx context.Context, data []byte, sensitivity float64) (engine.Analysis, error) {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
-	analysis, err := h.analyzer.Analyze(ctx, data)
+	analysis, err := h.analyzer.AnalyzeWith(ctx, data, engine.AnalyzeOptions{Sensitivity: sensitivity})
 	if err != nil {
 		return engine.Analysis{}, err
 	}
@@ -291,22 +325,28 @@ func sendCachedJSON(c fiber.Ctx, body []byte) error {
 	return c.Send(body)
 }
 
-func (h *handlers) picData(c fiber.Ctx) ([]byte, bool) {
+func (h *handlers) picData(c fiber.Ctx) ([]byte, float64, bool) {
 	var req picRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
-		return nil, false
+		return nil, 0, false
 	}
 	if req.Base64 == "" {
 		_ = utils.ReportError(c, "Bad Request", fiber.StatusBadRequest)
-		return nil, false
+		return nil, 0, false
+	}
+	if req.Sensitivity != 0 &&
+		(math.IsNaN(req.Sensitivity) || math.IsInf(req.Sensitivity, 0) ||
+			req.Sensitivity < 0.1 || req.Sensitivity > 10) {
+		_ = utils.ReportError(c, "sensitivity must be between 0.1 and 10", fiber.StatusBadRequest)
+		return nil, 0, false
 	}
 	data, err := utils.DecodePayload(req.Base64)
 	if err != nil {
 		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
-		return nil, false
+		return nil, 0, false
 	}
-	return data, true
+	return data, req.Sensitivity, true
 }
 
 type batchRequest struct {
@@ -334,37 +374,51 @@ func (h *handlers) picBatch(c fiber.Ctx) error {
 			fiber.StatusBadRequest,
 		)
 	}
-	results := make([]any, len(req.Images))
-	g, gctx := errgroup.WithContext(c.Context())
+	return c.JSON(batchResponse{
+		Status:  "ok",
+		Message: successMessage,
+		Results: h.analyzeBatch(c.Context(), req.Images),
+	})
+}
+
+func (h *handlers) analyzeBatch(ctx context.Context, images []picRequest) []any {
+	results := make([]any, len(images))
+	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(min(h.batchMax, requestConcurrency))
-	for i := range req.Images {
+	for i := range images {
 		g.Go(func() error {
-			results[i] = h.checkOne(gctx, req.Images[i])
+			results[i] = h.checkOne(gctx, images[i])
 			return nil
 		})
 	}
 	_ = g.Wait()
-	return c.JSON(batchResponse{Status: "ok", Message: successMessage, Results: results})
+	return results
 }
 
 func (h *handlers) checkOne(ctx context.Context, req picRequest) any {
 	if req.Base64 == "" {
 		return utils.ErrorResult("Bad Request")
 	}
+	if req.Sensitivity != 0 &&
+		(math.IsNaN(req.Sensitivity) || math.IsInf(req.Sensitivity, 0) ||
+			req.Sensitivity < 0.1 || req.Sensitivity > 10) {
+		return utils.ErrorResult("sensitivity must be between 0.1 and 10")
+	}
 	data, err := utils.DecodePayload(req.Base64)
 	if err != nil {
 		return utils.ErrorResult(err.Error())
 	}
-	key := cacheKey("/pic/check", data)
+	key := cacheKey("/pic/check", req.Sensitivity, data)
 	if h.cache != nil {
 		if body, hit := h.cache.get(key); hit {
 			return json.RawMessage(body)
 		}
 	}
-	analysis, err := h.analyzeData(ctx, data)
+	analysis, err := h.analyzeData(ctx, data, req.Sensitivity)
 	if err != nil {
 		return utils.ErrorResult(err.Error())
 	}
+	h.metrics.observeVerdict(analysis.Verdict)
 	nsfwText, err := h.textNSFW(ctx, data)
 	if err != nil {
 		return utils.ErrorResult(err.Error())
@@ -399,6 +453,8 @@ func analyzeErrorStatus(err error) int {
 		return fiber.StatusBadRequest
 	case errors.Is(err, context.DeadlineExceeded):
 		return fiber.StatusGatewayTimeout
+	case errors.Is(err, engine.ErrInvalidSensitivity):
+		return fiber.StatusBadRequest
 	default:
 		return fiber.StatusInternalServerError
 	}
@@ -483,6 +539,9 @@ func requestLogger(log *slog.Logger) fiber.Handler {
 			"path", c.Path(),
 			"status", status,
 			"duration", time.Since(start),
+		}
+		if rid := requestid.FromContext(c); rid != "" {
+			attrs = append(attrs, "requestId", rid)
 		}
 		if err != nil {
 			log.Error("http request", append(attrs, "error", err)...)

@@ -45,14 +45,17 @@ func TestResponseCacheReplacesAndCounts(t *testing.T) {
 }
 
 func TestCacheKeyDependsOnEndpointAndData(t *testing.T) {
-	check := cacheKey("/pic/check", []byte("image"))
-	if check == cacheKey("/pic/labels", []byte("image")) {
+	check := cacheKey("/pic/check", 1, []byte("image"))
+	if check == cacheKey("/pic/labels", 1, []byte("image")) {
 		t.Error("cache key ignores the endpoint")
 	}
-	if check == cacheKey("/pic/check", []byte("other")) {
+	if check == cacheKey("/pic/check", 1, []byte("other")) {
 		t.Error("cache key ignores the data")
 	}
-	if check != cacheKey("/pic/check", []byte("image")) {
+	if check == cacheKey("/pic/check", 2, []byte("image")) {
+		t.Error("cache key ignores the sensitivity")
+	}
+	if check != cacheKey("/pic/check", 1, []byte("image")) {
 		t.Error("cache key is not stable")
 	}
 }

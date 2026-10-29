@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -40,7 +41,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() returned error %v, want nil", err)
 	}
-	if want := wantDefaults(); got != want {
+	if want := wantDefaults(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Load() = %+v, want defaults %+v", got, want)
 	}
 }
@@ -144,7 +145,7 @@ func TestLoadOverrides(t *testing.T) {
 				t.Fatalf("Load(%v) returned error %v, want nil", tt.env, err)
 			}
 			want := tt.want(wantDefaults())
-			if got != want {
+			if !reflect.DeepEqual(got, want) {
 				t.Errorf("Load(%v) = %+v, want %+v", tt.env, got, want)
 			}
 		})
@@ -229,7 +230,7 @@ func TestLoadWhitespace(t *testing.T) {
 		want.SessionPoolSize = 4
 		want.LogLevel = "warn"
 		want.LogFormat = "json"
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("Load(%v) = %+v, want %+v", env, got, want)
 		}
 	})
@@ -244,7 +245,7 @@ func TestLoadWhitespace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Load(%v) returned error %v, want nil", env, err)
 		}
-		if want := wantDefaults(); got != want {
+		if want := wantDefaults(); !reflect.DeepEqual(got, want) {
 			t.Errorf("Load(%v) = %+v, want defaults %+v", env, got, want)
 		}
 	})
@@ -315,6 +316,31 @@ func TestLoadCacheEntries(t *testing.T) {
 	for _, value := range []string{"-1", "100001", "invalid"} {
 		if _, err := Load(getenvFrom(map[string]string{"CACHE_ENTRIES": value})); err == nil {
 			t.Errorf("Load(CACHE_ENTRIES=%s) accepted an invalid value", value)
+		}
+	}
+}
+
+func TestLoadAPIKeysAndRateLimit(t *testing.T) {
+	cfg, err := Load(getenvFrom(map[string]string{"API_KEYS": " first , second ", "RATE_LIMIT_RPM": "120"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"first", "second"}; !reflect.DeepEqual(cfg.APIKeys, want) {
+		t.Fatalf("APIKeys = %v, want %v", cfg.APIKeys, want)
+	}
+	if cfg.RateLimitRPM != 120 {
+		t.Fatalf("RateLimitRPM = %d, want 120", cfg.RateLimitRPM)
+	}
+	cfg, err = Load(getenvFrom(map[string]string{"API_KEYS": " , "}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.APIKeys) != 0 {
+		t.Fatalf("APIKeys = %v, want empty for a blank value", cfg.APIKeys)
+	}
+	for _, value := range []string{"-1", "1000001", "invalid"} {
+		if _, err := Load(getenvFrom(map[string]string{"RATE_LIMIT_RPM": value})); err == nil {
+			t.Errorf("Load(RATE_LIMIT_RPM=%s) accepted an invalid value", value)
 		}
 	}
 }

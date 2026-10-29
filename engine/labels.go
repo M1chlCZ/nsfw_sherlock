@@ -26,20 +26,30 @@ func (l *Labels) GetLabels() Labels {
 }
 
 func (l *Labels) NSFW(_ float32) bool {
-	if l.Neutral > 0.75 || l.Drawings > 0.75 {
+	return l.nsfwScaled(1)
+}
+
+// nsfwScaled is the legacy decision with thresholds divided by scale.
+func (l *Labels) nsfwScaled(scale float32) bool {
+	if scale <= 0 {
+		scale = 1
+	}
+	minor := float32(0.1) / scale
+	hentai := float32(0.2) / scale
+	if l.Neutral > LegacyThresholdSafe || l.Drawings > LegacyThresholdSafe {
 		if l.Porn < 0.1 && l.Sexy < 0.1 {
 			return false
 		}
 		return true
 	}
 
-	if l.Porn > 0.1 {
+	if l.Porn > minor {
 		return true
 	}
-	if l.Sexy > 0.1 {
+	if l.Sexy > minor {
 		return true
 	}
-	if l.Hentai > 0.2 {
+	if l.Hentai > hentai {
 		return true
 	}
 

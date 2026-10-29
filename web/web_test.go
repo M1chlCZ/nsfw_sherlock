@@ -33,17 +33,23 @@ type fakeAnalyzer struct {
 	err      error
 	fn       func(ctx context.Context, data []byte) (engine.Analysis, error)
 
-	mu    sync.Mutex
-	calls int
-	data  []byte
-	ctx   context.Context
+	mu      sync.Mutex
+	calls   int
+	data    []byte
+	ctx     context.Context
+	options engine.AnalyzeOptions
 }
 
-func (f *fakeAnalyzer) Analyze(ctx context.Context, data []byte) (engine.Analysis, error) {
+func (f *fakeAnalyzer) AnalyzeWith(
+	ctx context.Context,
+	data []byte,
+	opts engine.AnalyzeOptions,
+) (engine.Analysis, error) {
 	f.mu.Lock()
 	f.calls++
 	f.data = append([]byte(nil), data...)
 	f.ctx = ctx
+	f.options = opts
 	f.mu.Unlock()
 	if f.fn != nil {
 		return f.fn(ctx, data)
@@ -55,6 +61,12 @@ func (f *fakeAnalyzer) snapshot() (int, []byte, context.Context) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calls, append([]byte(nil), f.data...), f.ctx
+}
+
+func (f *fakeAnalyzer) lastOptions() engine.AnalyzeOptions {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.options
 }
 
 type captureHandler struct {
@@ -1332,5 +1344,86 @@ func TestPicBatchUsesTheCache(t *testing.T) {
 	}
 	if calls, _, _ := analyzer.snapshot(); calls != 1 {
 		t.Errorf("Analyze calls = %d, want 1; the batch must use the cached result", calls)
+	}
+}
+
+func TestSensitivityOptionReachesTheAnalyzer(t *testing.T) {
+	payload := base64.StdEncoding.EncodeToString([]byte("fake-image-bytes"))
+	analyzer := &fakeAnalyzer{}
+	app := NewApp(
+		config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 4, CacheEntries: 4},
+		analyzer,
+		nil,
+		testLogger(),
+	)
+
+	body, err := json.Marshal(picRequest{Base64: payload, Sensitivity: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, resp := doRequest(t, app, http.MethodPost, "/pic/check", string(body))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", status, resp)
+	}
+	if got := analyzer.lastOptions().Sensitivity; got != 2 {
+		t.Fatalf("analyzer sensitivity = %v, want 2", got)
+	}
+
+	status, resp = doRequest(t, app, http.MethodPost, "/pic/check", string(body))
+	if status != http.StatusOK {
+		t.Fatalf("repeat status = %d, want 200; body: %s", status, resp)
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 1 {
+		t.Errorf("Analyze calls = %d, want 1; the repeat must use the cache", calls)
+	}
+
+	defaultBody, err := json.Marshal(picRequest{Base64: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, resp = doRequest(t, app, http.MethodPost, "/pic/check", string(defaultBody))
+	if status != http.StatusOK {
+		t.Fatalf("default status = %d, want 200; body: %s", status, resp)
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 2 {
+		t.Errorf("Analyze calls = %d, want 2; the cache key must include the sensitivity", calls)
+	}
+}
+
+func TestSensitivityValidation(t *testing.T) {
+	payload := base64.StdEncoding.EncodeToString([]byte("fake-image-bytes"))
+	analyzer := &fakeAnalyzer{}
+	app := NewApp(config.Config{MaxImageBytes: 1 << 20, BatchMaxImages: 4}, analyzer, nil, testLogger())
+
+	for _, sensitivity := range []float64{0.05, 11} {
+		body, err := json.Marshal(picRequest{Base64: payload, Sensitivity: sensitivity})
+		if err != nil {
+			t.Fatal(err)
+		}
+		status, resp := doRequest(t, app, http.MethodPost, "/pic/check", string(body))
+		if status != http.StatusBadRequest {
+			t.Fatalf("sensitivity %v status = %d, want 400; body: %s", sensitivity, status, resp)
+		}
+		assertLegacyError(t, resp)
+	}
+	if calls, _, _ := analyzer.snapshot(); calls != 0 {
+		t.Errorf("Analyze calls = %d, want 0", calls)
+	}
+
+	breq, err := json.Marshal(batchRequest{Images: []picRequest{{Base64: payload, Sensitivity: 11}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, resp := doRequest(t, app, http.MethodPost, "/pic/batch", string(breq))
+	if status != http.StatusOK {
+		t.Fatalf("batch status = %d, want 200; body: %s", status, resp)
+	}
+	results, ok := decodeJSON(t, resp)["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %v, want 1 item", decodeJSON(t, resp)["results"])
+	}
+	item, ok := results[0].(map[string]any)
+	if !ok || item["status"] != "FAIL" {
+		t.Errorf("batch item = %v, want a FAIL result", results[0])
 	}
 }

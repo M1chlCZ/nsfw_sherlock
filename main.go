@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"nsfw_sherlock/config"
 	"nsfw_sherlock/engine"
@@ -73,6 +74,14 @@ func serve(cfg config.Config, log *slog.Logger) error {
 	for _, warning := range eng.Warnings() {
 		log.Warn(warning)
 	}
+
+	warmUpCtx, cancelWarmUp := context.WithTimeout(context.Background(), 60*time.Second)
+	warmUpErr := eng.WarmUp(warmUpCtx)
+	cancelWarmUp()
+	if warmUpErr != nil {
+		return warmUpErr
+	}
+	log.Info("models warmed up")
 
 	if err := loadBadWords(cfg, log); err != nil {
 		return err

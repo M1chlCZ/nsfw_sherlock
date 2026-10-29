@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -20,6 +21,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
+	reflectv1 "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
@@ -32,15 +35,21 @@ type fakeAnalyzer struct {
 	err      error
 	fn       func(ctx context.Context, data []byte) (engine.Analysis, error)
 
-	mu    sync.Mutex
-	calls int
-	data  []byte
+	mu      sync.Mutex
+	calls   int
+	data    []byte
+	options engine.AnalyzeOptions
 }
 
-func (f *fakeAnalyzer) Analyze(ctx context.Context, data []byte) (engine.Analysis, error) {
+func (f *fakeAnalyzer) AnalyzeWith(
+	ctx context.Context,
+	data []byte,
+	opts engine.AnalyzeOptions,
+) (engine.Analysis, error) {
 	f.mu.Lock()
 	f.calls++
 	f.data = append([]byte(nil), data...)
+	f.options = opts
 	f.mu.Unlock()
 	if f.fn != nil {
 		return f.fn(ctx, data)
@@ -52,6 +61,12 @@ func (f *fakeAnalyzer) snapshot() (int, []byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calls, append([]byte(nil), f.data...)
+}
+
+func (f *fakeAnalyzer) lastOptions() engine.AnalyzeOptions {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.options
 }
 
 func testLogger() *slog.Logger {
@@ -676,4 +691,112 @@ func waitForDial(t *testing.T, addr string) net.Conn {
 	}
 	t.Fatalf("server did not accept connections on %s", addr)
 	return nil
+}
+
+func TestSensitivityReachesTheAnalyzer(t *testing.T) {
+	analyzer := &fakeAnalyzer{}
+	client := newTestClient(t, analyzer, nil)
+	_, err := client.Detect(context.Background(), &grpcModels.NSFWRequest{
+		Base64:      encodePayload(t),
+		Sensitivity: 2,
+	})
+	if err != nil {
+		t.Fatalf("Detect() error = %v, want nil", err)
+	}
+	if got := analyzer.lastOptions().Sensitivity; got != 2 {
+		t.Fatalf("analyzer sensitivity = %v, want 2", got)
+	}
+}
+
+func TestInvalidSensitivityMapsToInvalidArgument(t *testing.T) {
+	analyzer := &fakeAnalyzer{err: engine.ErrInvalidSensitivity}
+	client := newTestClient(t, analyzer, nil)
+	_, err := client.Detect(context.Background(), &grpcModels.NSFWRequest{
+		Base64:      encodePayload(t),
+		Sensitivity: 11,
+	})
+	assertCode(t, err, codes.InvalidArgument)
+}
+
+func TestHealthAndReflection(t *testing.T) {
+	port := freePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- StartGrpcServer(
+			ctx,
+			config.Config{Port: port, MaxImageBytes: 1 << 20},
+			&fakeAnalyzer{},
+			nil,
+			testLogger(),
+		)
+	}()
+
+	conn, err := grpc.NewClient(
+		fmt.Sprintf("127.0.0.1:%d", port),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient() error = %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	healthClient := healthgrpc.NewHealthClient(conn)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		resp, checkErr := healthClient.Check(context.Background(), &healthgrpc.HealthCheckRequest{})
+		if checkErr == nil {
+			if resp.GetStatus() != healthgrpc.HealthCheckResponse_SERVING {
+				t.Fatalf("health status = %v, want SERVING", resp.GetStatus())
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("health check error = %v", checkErr)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	named, err := healthClient.Check(context.Background(), &healthgrpc.HealthCheckRequest{Service: "proto.NSFW"})
+	if err != nil {
+		t.Fatalf("named health check error = %v", err)
+	}
+	if named.GetStatus() != healthgrpc.HealthCheckResponse_SERVING {
+		t.Fatalf("named health status = %v, want SERVING", named.GetStatus())
+	}
+
+	stream, err := reflectv1.NewServerReflectionClient(conn).ServerReflectionInfo(context.Background())
+	if err != nil {
+		t.Fatalf("reflection stream error = %v", err)
+	}
+	err = stream.Send(&reflectv1.ServerReflectionRequest{
+		MessageRequest: &reflectv1.ServerReflectionRequest_ListServices{},
+	})
+	if err != nil {
+		t.Fatalf("reflection send error = %v", err)
+	}
+	reply, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("reflection recv error = %v", err)
+	}
+	var names []string
+	for _, svc := range reply.GetListServicesResponse().GetService() {
+		names = append(names, svc.GetName())
+	}
+	if !slices.Contains(names, "proto.NSFW") {
+		t.Errorf("reflection services = %v, want proto.NSFW", names)
+	}
+	if err := stream.CloseSend(); err != nil {
+		t.Fatalf("reflection close error = %v", err)
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("StartGrpcServer() = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("StartGrpcServer did not stop")
+	}
 }

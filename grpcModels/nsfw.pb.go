@@ -25,6 +25,7 @@ type NSFWRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Base64        string                 `protobuf:"bytes,1,opt,name=base64,proto3" json:"base64,omitempty"`
 	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	Sensitivity   float32                `protobuf:"fixed32,3,opt,name=sensitivity,proto3" json:"sensitivity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -71,6 +72,13 @@ func (x *NSFWRequest) GetFilename() string {
 		return x.Filename
 	}
 	return ""
+}
+
+func (x *NSFWRequest) GetSensitivity() float32 {
+	if x != nil {
+		return x.Sensitivity
+	}
+	return 0
 }
 
 type NSFWResponse struct {
@@ -129,6 +137,7 @@ type NSFWLabelsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Base64        string                 `protobuf:"bytes,1,opt,name=base64,proto3" json:"base64,omitempty"`
 	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	Sensitivity   float32                `protobuf:"fixed32,3,opt,name=sensitivity,proto3" json:"sensitivity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -175,6 +184,13 @@ func (x *NSFWLabelsRequest) GetFilename() string {
 		return x.Filename
 	}
 	return ""
+}
+
+func (x *NSFWLabelsRequest) GetSensitivity() float32 {
+	if x != nil {
+		return x.Sensitivity
+	}
+	return 0
 }
 
 type NSFWLabels struct {
@@ -614,16 +630,18 @@ var File_nsfw_proto protoreflect.FileDescriptor
 const file_nsfw_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"nsfw.proto\x12\x05proto\"A\n" +
+	"nsfw.proto\x12\x05proto\"c\n" +
 	"\vNSFWRequest\x12\x16\n" +
 	"\x06base64\x18\x01 \x01(\tR\x06base64\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"L\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
+	"\vsensitivity\x18\x03 \x01(\x02R\vsensitivity\"L\n" +
 	"\fNSFWResponse\x12 \n" +
 	"\vnsfwPicture\x18\x01 \x01(\bR\vnsfwPicture\x12\x1a\n" +
-	"\bnsfwText\x18\x02 \x01(\bR\bnsfwText\"G\n" +
+	"\bnsfwText\x18\x02 \x01(\bR\bnsfwText\"i\n" +
 	"\x11NSFWLabelsRequest\x12\x16\n" +
 	"\x06base64\x18\x01 \x01(\tR\x06base64\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"\x9e\x01\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
+	"\vsensitivity\x18\x03 \x01(\x02R\vsensitivity\"\x9e\x01\n" +
 	"\n" +
 	"NSFWLabels\x12\x1a\n" +
 	"\bDrawings\x18\x01 \x01(\x02R\bDrawings\x12\x16\n" +
