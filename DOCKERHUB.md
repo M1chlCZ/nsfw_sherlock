@@ -105,7 +105,7 @@ The [service definition](https://github.com/M1chlCZ/nsfw_sherlock/blob/main/prot
 ### NVIDIA · CUDA
 
 Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Toolkit.
-CUDA images are tagged with a `-cuda` suffix, for example `v1.3.0-cuda` and `latest-cuda`.
+CUDA images are tagged with a `-cuda` suffix, for example `v1.3.1-cuda` and `latest-cuda`.
 
 ```sh
 docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:latest-cuda
