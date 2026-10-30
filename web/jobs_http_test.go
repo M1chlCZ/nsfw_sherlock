@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,10 +66,10 @@ func jobVideoApp(analyzer Analyzer, extractor video.Extractor) *fiber.App {
 		analyzer:    analyzer,
 		timeout:     time.Second,
 		batchMax:    4,
-		metrics:     newMetricsState(nil),
+		metrics:     newMetricsState(nil, nil),
 		video:       extractor,
 		videoLimits: video.Limits{FPS: 2, MaxFrames: 8, MaxWidth: videoMaxWidth},
-		jobs:        newJobManager(context.Background()),
+		jobs:        newJobManager(context.Background(), jobOptions{}),
 	}
 	app := fiber.New()
 	app.Post("/jobs", h.submitJob)
@@ -121,6 +123,164 @@ func TestSubmitBatchJob(t *testing.T) {
 	}
 	if calls, _, _ := analyzer.snapshot(); calls != 2 {
 		t.Errorf("Analyze calls = %d, want 2", calls)
+	}
+}
+
+func TestListJobs(t *testing.T) {
+	payload := base64.StdEncoding.EncodeToString([]byte("fake-image-bytes"))
+	app := testJobApp(t, &fakeAnalyzer{analysis: engine.Analysis{}})
+	status, body := doRequest(t, app, http.MethodPost, "/jobs", `{"images":[{"base64":"`+payload+`"}]}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body: %s", status, body)
+	}
+	job := decodeJSON(t, body)["job"].(map[string]any)
+	waitForHTTPJob(t, app, job["id"].(string))
+
+	status, body = doRequest(t, app, http.MethodGet, "/jobs", "")
+	if status != http.StatusOK {
+		t.Fatalf("GET /jobs = %d; body: %s", status, body)
+	}
+	fields := decodeJSON(t, body)
+	jobs, ok := fields["jobs"].([]any)
+	if !ok || len(jobs) != 1 {
+		t.Fatalf("jobs = %v", fields["jobs"])
+	}
+	counts := fields["counts"].(map[string]any)
+	if counts["done"] != float64(1) || counts["total"] != float64(1) {
+		t.Errorf("counts = %v", counts)
+	}
+
+	status, body = doRequest(t, app, http.MethodGet, "/jobs?state=done", "")
+	if status != http.StatusOK {
+		t.Fatalf("filtered list = %d; body: %s", status, body)
+	}
+	if jobs := decodeJSON(t, body)["jobs"].([]any); len(jobs) != 1 {
+		t.Errorf("filtered jobs = %v", jobs)
+	}
+	status, body = doRequest(t, app, http.MethodGet, "/jobs?state=done&limit=1", "")
+	if status != http.StatusOK {
+		t.Fatalf("limited list = %d; body: %s", status, body)
+	}
+
+	for _, query := range []string{"?state=unknown", "?limit=zero", "?limit=0"} {
+		status, body = doRequest(t, app, http.MethodGet, "/jobs"+query, "")
+		if status != http.StatusBadRequest {
+			t.Errorf("GET /jobs%s = %d, want 400; body: %s", query, status, body)
+		}
+	}
+}
+
+func TestJobEventsStreamEndsAtTerminalState(t *testing.T) {
+	payload := base64.StdEncoding.EncodeToString([]byte("fake-image-bytes"))
+	app := testJobApp(t, &fakeAnalyzer{analysis: engine.Analysis{}})
+	status, body := doRequest(t, app, http.MethodPost, "/jobs", `{"images":[{"base64":"`+payload+`"}]}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body: %s", status, body)
+	}
+	job := decodeJSON(t, body)["job"].(map[string]any)
+	id := job["id"].(string)
+	waitForHTTPJob(t, app, id)
+
+	resp, err := app.Test(
+		httptest.NewRequest(http.MethodGet, "/jobs/"+id+"/events", nil),
+		fiber.TestConfig{Timeout: 5 * time.Second},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if contentType := resp.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/event-stream") {
+		t.Errorf("Content-Type = %q", contentType)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := string(data)
+	for _, want := range []string{"event: done", `"state":"done"`, `"id":"` + id + `"`} {
+		if !strings.Contains(stream, want) {
+			t.Errorf("stream lacks %q:\n%s", want, stream)
+		}
+	}
+
+	if status, body := doRequest(t, app, http.MethodGet, "/jobs/missing/events", ""); status != http.StatusNotFound {
+		t.Fatalf("unknown job stream = %d, want 404; body: %s", status, body)
+	}
+}
+
+func TestJobEventsStreamsUntilTheJobEnds(t *testing.T) {
+	manager := newJobManager(context.Background(), jobOptions{Workers: 1})
+	h := &handlers{
+		analyzer: &fakeAnalyzer{},
+		timeout:  time.Second,
+		batchMax: 1,
+		metrics:  newMetricsState(nil, nil),
+		jobs:     manager,
+	}
+	app := fiber.New()
+	app.Get("/jobs/:id/events", h.jobEvents)
+
+	view, err := manager.submit("batch", func(ctx context.Context) (any, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	waitForJobState(t, manager, view.ID, jobRunning)
+
+	type streamResult struct {
+		status int
+		body   []byte
+		err    error
+	}
+	streamed := make(chan streamResult, 1)
+	go func() {
+		resp, err := app.Test(
+			httptest.NewRequest(http.MethodGet, "/jobs/"+view.ID+"/events", nil),
+			fiber.TestConfig{Timeout: 5 * time.Second},
+		)
+		if err != nil {
+			streamed <- streamResult{err: err}
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		streamed <- streamResult{status: resp.StatusCode, body: body, err: err}
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		manager.mu.Lock()
+		subscribers := len(manager.subscribers[view.ID])
+		manager.mu.Unlock()
+		if subscribers > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the event stream did not subscribe")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := manager.cancel(view.ID); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+
+	result := <-streamed
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if result.status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", result.status, result.body)
+	}
+	stream := string(result.body)
+	for _, want := range []string{"event: running", "event: canceled", `"state":"canceled"`} {
+		if !strings.Contains(stream, want) {
+			t.Errorf("stream lacks %q:\n%s", want, stream)
+		}
 	}
 }
 
@@ -188,8 +348,8 @@ func TestSubmitVideoJobWithoutFFmpeg(t *testing.T) {
 		analyzer: frameAnalyzer(),
 		timeout:  time.Second,
 		batchMax: 4,
-		metrics:  newMetricsState(nil),
-		jobs:     newJobManager(context.Background()),
+		metrics:  newMetricsState(nil, nil),
+		jobs:     newJobManager(context.Background(), jobOptions{}),
 	}
 	app := fiber.New()
 	app.Post("/jobs", h.submitJob)

@@ -29,6 +29,9 @@ const (
 	envVideoMaxBytes   = "VIDEO_MAX_BYTES"
 	envAPIKeys         = "API_KEYS"
 	envRateLimitRPM    = "RATE_LIMIT_RPM"
+	envJobWorkers      = "JOB_WORKERS"
+	envJobMaxEntries   = "JOB_MAX_ENTRIES"
+	envJobTTLSeconds   = "JOB_TTL_SECONDS"
 	envLogLevel        = "LOG_LEVEL"
 	envLogFormat       = "LOG_FORMAT"
 )
@@ -56,6 +59,12 @@ const (
 	maxVideoMaxFrames      = 240
 	defaultRateLimitRPM    = 0
 	maxRateLimitRPM        = 1_000_000
+	defaultJobWorkers      = 2
+	defaultJobMaxEntries   = 64
+	defaultJobTTLSeconds   = 600
+	maxJobWorkers          = 32
+	maxJobMaxEntries       = 10_000
+	maxJobTTLSeconds       = 86_400
 	defaultLogLevel        = "info"
 	defaultLogFormat       = "text"
 )
@@ -80,6 +89,9 @@ type Config struct {
 	CacheEntries    int
 	APIKeys         []string
 	RateLimitRPM    int
+	JobWorkers      int
+	JobMaxEntries   int
+	JobTTLSeconds   int
 	FFmpegPath      string
 	VideoSampleFPS  float64
 	VideoMaxFrames  int
@@ -106,6 +118,9 @@ func Load(getenv func(string) string) (Config, error) {
 		BatchMaxImages:  defaultBatchMaxImages,
 		CacheEntries:    defaultCacheEntries,
 		RateLimitRPM:    defaultRateLimitRPM,
+		JobWorkers:      defaultJobWorkers,
+		JobMaxEntries:   defaultJobMaxEntries,
+		JobTTLSeconds:   defaultJobTTLSeconds,
 		FFmpegPath:      defaultFFmpegPath,
 		VideoSampleFPS:  defaultVideoSampleFPS,
 		VideoMaxFrames:  defaultVideoMaxFrames,
@@ -155,6 +170,9 @@ func Load(getenv func(string) string) (Config, error) {
 	cfg.BadWordsFile = stringFromEnv(getenv, envBadWordsFile, cfg.BadWordsFile)
 
 	if err := cfg.loadLimits(getenv); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.loadJobLimits(getenv); err != nil {
 		return Config{}, err
 	}
 	if cfg.LogLevel, err = enumFromEnv(
@@ -263,6 +281,44 @@ func (cfg *Config) loadLimits(getenv func(string) string) error {
 			"config: %s: value %d must be greater than 0",
 			envVideoMaxBytes,
 			cfg.VideoMaxBytes,
+		)
+	}
+	return nil
+}
+
+func (cfg *Config) loadJobLimits(getenv func(string) string) error {
+	var err error
+	if cfg.JobWorkers, err = intFromEnv(getenv, envJobWorkers, cfg.JobWorkers); err != nil {
+		return err
+	}
+	if cfg.JobWorkers < 1 || cfg.JobWorkers > maxJobWorkers {
+		return fmt.Errorf(
+			"config: %s: value %d must be in 1..%d",
+			envJobWorkers,
+			cfg.JobWorkers,
+			maxJobWorkers,
+		)
+	}
+	if cfg.JobMaxEntries, err = intFromEnv(getenv, envJobMaxEntries, cfg.JobMaxEntries); err != nil {
+		return err
+	}
+	if cfg.JobMaxEntries < 1 || cfg.JobMaxEntries > maxJobMaxEntries {
+		return fmt.Errorf(
+			"config: %s: value %d must be in 1..%d",
+			envJobMaxEntries,
+			cfg.JobMaxEntries,
+			maxJobMaxEntries,
+		)
+	}
+	if cfg.JobTTLSeconds, err = intFromEnv(getenv, envJobTTLSeconds, cfg.JobTTLSeconds); err != nil {
+		return err
+	}
+	if cfg.JobTTLSeconds < 1 || cfg.JobTTLSeconds > maxJobTTLSeconds {
+		return fmt.Errorf(
+			"config: %s: value %d must be in 1..%d",
+			envJobTTLSeconds,
+			cfg.JobTTLSeconds,
+			maxJobTTLSeconds,
 		)
 	}
 	return nil

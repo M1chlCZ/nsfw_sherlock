@@ -27,6 +27,9 @@ func wantDefaults() Config {
 		SessionPoolSize: 2,
 		BatchMaxImages:  4,
 		CacheEntries:    0,
+		JobWorkers:      2,
+		JobMaxEntries:   64,
+		JobTTLSeconds:   600,
 		FFmpegPath:      "ffmpeg",
 		VideoSampleFPS:  1,
 		VideoMaxFrames:  24,
@@ -342,6 +345,42 @@ func TestLoadAPIKeysAndRateLimit(t *testing.T) {
 		if _, err := Load(getenvFrom(map[string]string{"RATE_LIMIT_RPM": value})); err == nil {
 			t.Errorf("Load(RATE_LIMIT_RPM=%s) accepted an invalid value", value)
 		}
+	}
+}
+
+func TestLoadJobLimits(t *testing.T) {
+	cfg, err := Load(getenvFrom(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.JobWorkers != 2 || cfg.JobMaxEntries != 64 || cfg.JobTTLSeconds != 600 {
+		t.Fatalf("job defaults = %d/%d/%d, want 2/64/600", cfg.JobWorkers, cfg.JobMaxEntries, cfg.JobTTLSeconds)
+	}
+	cfg, err = Load(getenvFrom(map[string]string{
+		"JOB_WORKERS":     "6",
+		"JOB_MAX_ENTRIES": "256",
+		"JOB_TTL_SECONDS": "1800",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.JobWorkers != 6 || cfg.JobMaxEntries != 256 || cfg.JobTTLSeconds != 1800 {
+		t.Fatalf("job limits = %d/%d/%d, want 6/256/1800", cfg.JobWorkers, cfg.JobMaxEntries, cfg.JobTTLSeconds)
+	}
+	for name, env := range map[string]map[string]string{
+		"workers zero":         {"JOB_WORKERS": "0"},
+		"workers high":         {"JOB_WORKERS": "33"},
+		"entries zero":         {"JOB_MAX_ENTRIES": "0"},
+		"entries high":         {"JOB_MAX_ENTRIES": "10001"},
+		"ttl zero":             {"JOB_TTL_SECONDS": "0"},
+		"ttl high":             {"JOB_TTL_SECONDS": "86401"},
+		"workers not a number": {"JOB_WORKERS": "many"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Load(getenvFrom(env)); err == nil {
+				t.Fatalf("Load() returned no error for %v", env)
+			}
+		})
 	}
 }
 

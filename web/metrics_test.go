@@ -16,7 +16,7 @@ import (
 )
 
 func TestMetricsRenderOnFreshState(t *testing.T) {
-	state := newMetricsState(nil)
+	state := newMetricsState(nil, nil)
 	out := state.render()
 	for _, want := range []string{
 		"# TYPE nsfw_requests_total counter",
@@ -73,6 +73,42 @@ func TestMetricsObserveRequestsAndVerdicts(t *testing.T) {
 	}
 	if strings.Contains(out, `endpoint="/metrics"`) {
 		t.Error("the metrics endpoint must not count itself")
+	}
+}
+
+func TestMetricsRenderJobState(t *testing.T) {
+	manager := newJobManager(context.Background(), jobOptions{Workers: 1})
+	state := newMetricsState(nil, manager)
+	view, err := manager.submit("batch", func(context.Context) (any, error) {
+		return "result", nil
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		job, err := manager.get(view.ID)
+		if err == nil && job.State == jobDone {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the job did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	out := state.render()
+	for _, want := range []string{
+		"nsfw_jobs_submitted_total 1",
+		"nsfw_jobs_rejected_total 0",
+		`nsfw_jobs_current{state="done"} 1`,
+		`nsfw_jobs_finished_total{state="done"} 1`,
+		"nsfw_job_duration_seconds_count 1",
+		`nsfw_job_duration_seconds_bucket{le="+Inf"} 1`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("metrics lack %q:\n%s", want, out)
+		}
 	}
 }
 

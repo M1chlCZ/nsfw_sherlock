@@ -1,21 +1,38 @@
 package web
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"nsfw_sherlock/utils"
 
 	"github.com/gofiber/fiber/v3"
 )
 
+const (
+	jobListDefaultLimit = 100
+	jobListMaxLimit     = 1000
+	sseKeepAlive        = 15 * time.Second
+)
+
 type jobResponse struct {
 	Status  string  `json:"status"`
 	Message string  `json:"message"`
 	Job     jobView `json:"job"`
+}
+
+type jobListResponse struct {
+	Status  string         `json:"status"`
+	Message string         `json:"message"`
+	Jobs    []jobView      `json:"jobs"`
+	Counts  map[string]int `json:"counts"`
 }
 
 // submitJob starts a background analysis.
@@ -92,6 +109,106 @@ func (h *handlers) submitVideoJob(c fiber.Ctx) error {
 		Message: successMessage,
 		Job:     view,
 	})
+}
+
+func (h *handlers) listJobs(c fiber.Ctx) error {
+	state := c.Query("state")
+	if state != "" && !validJobState(state) {
+		return utils.ReportError(
+			c,
+			fmt.Sprintf("unknown job state %q", state),
+			fiber.StatusBadRequest,
+		)
+	}
+	limit := jobListDefaultLimit
+	if raw := c.Query("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			return utils.ReportError(c, "limit must be a positive integer", fiber.StatusBadRequest)
+		}
+		limit = min(parsed, jobListMaxLimit)
+	}
+	jobs, counts := h.jobs.list(state, limit)
+	return c.JSON(jobListResponse{
+		Status:  "ok",
+		Message: successMessage,
+		Jobs:    jobs,
+		Counts:  counts,
+	})
+}
+
+func (h *handlers) jobEvents(c fiber.Ctx) error {
+	events, unsubscribe, err := h.jobs.subscribe(c.Params("id"))
+	if errors.Is(err, errJobNotFound) {
+		return utils.ReportError(c, errJobNotFound.Error(), fiber.StatusNotFound)
+	}
+	if err != nil {
+		return utils.ReportError(c, "internal error", fiber.StatusInternalServerError)
+	}
+
+	c.Set(fiber.HeaderContentType, "text/event-stream")
+	c.Set(fiber.HeaderCacheControl, "no-cache")
+	c.Set(fiber.HeaderConnection, "keep-alive")
+	c.Set("X-Accel-Buffering", "no")
+	c.Status(fiber.StatusOK)
+
+	err = c.SendStreamWriter(func(w *bufio.Writer) {
+		defer unsubscribe()
+		if _, err := w.WriteString("retry: 3000\n\n"); err != nil {
+			return
+		}
+		if err := w.Flush(); err != nil {
+			return
+		}
+		ticker := time.NewTicker(sseKeepAlive)
+		defer ticker.Stop()
+		for {
+			select {
+			case view, ok := <-events:
+				if !ok {
+					return
+				}
+				if err := writeJobEvent(w, view); err != nil {
+					return
+				}
+				if isTerminalJobState(view.State) {
+					return
+				}
+			case <-ticker.C:
+				if _, err := w.WriteString(": keepalive\n\n"); err != nil {
+					return
+				}
+				if err := w.Flush(); err != nil {
+					return
+				}
+			}
+		}
+	})
+	if err != nil {
+		unsubscribe()
+		return err
+	}
+	return nil
+}
+
+func writeJobEvent(w *bufio.Writer, view jobView) error {
+	body, err := json.Marshal(jobResponse{Status: "ok", Message: successMessage, Job: view})
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", view.State, body); err != nil {
+		return err
+	}
+	return w.Flush()
+}
+
+func validJobState(state string) bool {
+	for _, name := range jobStates {
+		if state == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *handlers) getJob(c fiber.Ctx) error {
