@@ -28,6 +28,11 @@ type jobResponse struct {
 	Job     jobView `json:"job"`
 }
 
+type batchJobRequest struct {
+	Images      []picRequest `json:"images"`
+	CallbackURL string       `json:"callbackUrl"`
+}
+
 type jobListResponse struct {
 	Status  string         `json:"status"`
 	Message string         `json:"message"`
@@ -47,7 +52,7 @@ func (h *handlers) submitJob(c fiber.Ctx) error {
 }
 
 func (h *handlers) submitBatchJob(c fiber.Ctx) error {
-	var req batchRequest
+	var req batchJobRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
 	}
@@ -61,10 +66,14 @@ func (h *handlers) submitBatchJob(c fiber.Ctx) error {
 			fiber.StatusBadRequest,
 		)
 	}
-	view, err := h.jobs.submit("batch", func(ctx context.Context) (any, error) {
+	callback, ok := h.callbackTarget(c, req.CallbackURL)
+	if !ok {
+		return nil
+	}
+	view, err := h.jobs.submitWithCallback("batch", callback, func(ctx context.Context) (any, error) {
 		results := h.analyzeBatch(ctx, req.Images)
 		return results, ctx.Err()
-	})
+	}, nil)
 	if err != nil {
 		return utils.ReportError(c, err.Error(), fiber.StatusTooManyRequests)
 	}
@@ -87,11 +96,15 @@ func (h *handlers) submitVideoJob(c fiber.Ctx) error {
 	if !ok {
 		return utils.ReportError(c, sensitivityMessage, fiber.StatusBadRequest)
 	}
+	callback, ok := h.callbackTarget(c, c.FormValue("callbackUrl"))
+	if !ok {
+		return nil
+	}
 	name, err := saveUpload(c, file)
 	if err != nil {
 		return utils.ReportError(c, "the upload could not be stored", fiber.StatusBadRequest)
 	}
-	view, err := h.jobs.submitWithCleanup("video", func(ctx context.Context) (any, error) {
+	view, err := h.jobs.submitWithCallback("video", callback, func(ctx context.Context) (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, videoAnalyzeTimeout)
 		defer cancel()
 		frames, err := h.video.Extract(ctx, name, h.videoLimits)
@@ -109,6 +122,19 @@ func (h *handlers) submitVideoJob(c fiber.Ctx) error {
 		Message: successMessage,
 		Job:     view,
 	})
+}
+
+// callbackTarget validates an optional finished-job callback URL.
+func (h *handlers) callbackTarget(c fiber.Ctx, raw string) (string, bool) {
+	callback := trimCallback(raw)
+	if callback == "" {
+		return "", true
+	}
+	if err := h.webhooks.validate(c.Context(), callback); err != nil {
+		_ = utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
+		return "", false
+	}
+	return callback, true
 }
 
 func (h *handlers) listJobs(c fiber.Ctx) error {

@@ -42,6 +42,7 @@ type jobOptions struct {
 	Workers    int
 	MaxEntries int
 	TTL        time.Duration
+	OnFinish   func(jobView, string)
 }
 
 func (o jobOptions) withDefaults() jobOptions {
@@ -68,6 +69,7 @@ type job struct {
 	finished time.Time
 	result   any
 	err      string
+	callback string
 	cancel   context.CancelFunc
 	cleanup  func()
 }
@@ -109,6 +111,7 @@ type jobManager struct {
 	workers     chan struct{}
 	ttl         time.Duration
 	max         int
+	onFinish    func(jobView, string)
 
 	submitted int64
 	rejected  int64
@@ -128,6 +131,7 @@ func newJobManager(baseCtx context.Context, options jobOptions) *jobManager {
 		workers:     make(chan struct{}, options.Workers),
 		ttl:         options.TTL,
 		max:         options.MaxEntries,
+		onFinish:    options.OnFinish,
 		finished:    make(map[string]int64),
 		durations:   *newLatencyHistogram(jobDurationBuckets),
 	}
@@ -135,13 +139,32 @@ func newJobManager(baseCtx context.Context, options jobOptions) *jobManager {
 
 // submit registers a job and starts it in the background.
 func (m *jobManager) submit(kind string, work jobWork) (jobView, error) {
-	return m.submitWithCleanup(kind, work, nil)
+	return m.submitJob(kind, "", work, nil)
 }
 
 // submitWithCleanup is submit with a callback that runs when the job ends,
 // even when a queued job is cancelled before its work starts.
 func (m *jobManager) submitWithCleanup(
 	kind string,
+	work jobWork,
+	cleanup func(),
+) (jobView, error) {
+	return m.submitJob(kind, "", work, cleanup)
+}
+
+// submitWithCallback is submitWithCleanup with a finished-job callback URL.
+func (m *jobManager) submitWithCallback(
+	kind string,
+	callback string,
+	work jobWork,
+	cleanup func(),
+) (jobView, error) {
+	return m.submitJob(kind, callback, work, cleanup)
+}
+
+func (m *jobManager) submitJob(
+	kind string,
+	callback string,
 	work jobWork,
 	cleanup func(),
 ) (jobView, error) {
@@ -154,12 +177,13 @@ func (m *jobManager) submitWithCleanup(
 	}
 	ctx, cancel := context.WithCancel(m.baseCtx)
 	entry := &job{
-		id:      newJobID(),
-		kind:    kind,
-		state:   jobQueued,
-		created: time.Now(),
-		cancel:  cancel,
-		cleanup: cleanup,
+		id:       newJobID(),
+		kind:     kind,
+		state:    jobQueued,
+		created:  time.Now(),
+		callback: callback,
+		cancel:   cancel,
+		cleanup:  cleanup,
 	}
 	m.jobs[entry.id] = entry
 	m.order = append(m.order, entry.id)
@@ -194,15 +218,25 @@ func (m *jobManager) run(ctx context.Context, entry *job, work jobWork) {
 	m.notifyLocked(entry)
 	m.mu.Unlock()
 	result, err := work(ctx)
+	deliver, callback, view := false, "", jobView{}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	switch {
 	case err != nil && errors.Is(err, context.Canceled):
 		m.finishLocked(entry, jobCanceled, "", nil)
 	case err != nil:
 		m.finishLocked(entry, jobFailed, err.Error(), nil)
+		deliver = entry.callback != "" && m.onFinish != nil
 	default:
 		m.finishLocked(entry, jobDone, "", result)
+		deliver = entry.callback != "" && m.onFinish != nil
+	}
+	if deliver {
+		callback = entry.callback
+		view = entry.view()
+	}
+	m.mu.Unlock()
+	if deliver {
+		go m.onFinish(view, callback)
 	}
 }
 

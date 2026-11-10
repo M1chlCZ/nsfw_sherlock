@@ -30,6 +30,8 @@ func wantDefaults() Config {
 		JobWorkers:      2,
 		JobMaxEntries:   64,
 		JobTTLSeconds:   600,
+		WebhookTimeout:  10,
+		WebhookRetries:  3,
 		FFmpegPath:      "ffmpeg",
 		VideoSampleFPS:  1,
 		VideoMaxFrames:  24,
@@ -345,6 +347,41 @@ func TestLoadAPIKeysAndRateLimit(t *testing.T) {
 		if _, err := Load(getenvFrom(map[string]string{"RATE_LIMIT_RPM": value})); err == nil {
 			t.Errorf("Load(RATE_LIMIT_RPM=%s) accepted an invalid value", value)
 		}
+	}
+}
+
+func TestLoadWebhookSettings(t *testing.T) {
+	cfg, err := Load(getenvFrom(map[string]string{
+		"WEBHOOK_SECRET":          "top-secret",
+		"WEBHOOK_TIMEOUT_SECONDS": "20",
+		"WEBHOOK_RETRIES":         "5",
+		"WEBHOOK_ALLOW_PRIVATE":   "true",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WebhookSecret != "top-secret" || cfg.WebhookTimeout != 20 ||
+		cfg.WebhookRetries != 5 || !cfg.WebhookPrivate {
+		t.Fatalf(
+			"webhook settings = %q/%d/%d/%v, want top-secret/20/5/true",
+			cfg.WebhookSecret,
+			cfg.WebhookTimeout,
+			cfg.WebhookRetries,
+			cfg.WebhookPrivate,
+		)
+	}
+	for name, env := range map[string]map[string]string{
+		"timeout zero":     {"WEBHOOK_TIMEOUT_SECONDS": "0"},
+		"timeout high":     {"WEBHOOK_TIMEOUT_SECONDS": "61"},
+		"retries negative": {"WEBHOOK_RETRIES": "-1"},
+		"retries high":     {"WEBHOOK_RETRIES": "11"},
+		"retries invalid":  {"WEBHOOK_RETRIES": "many"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Load(getenvFrom(env)); err == nil {
+				t.Fatalf("Load() returned no error for %v", env)
+			}
+		})
 	}
 }
 

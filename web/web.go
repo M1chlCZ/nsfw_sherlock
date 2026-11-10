@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
+	"mime/multipart"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"nsfw_sherlock/config"
@@ -54,12 +57,14 @@ type handlers struct {
 	checker        TextChecker
 	timeout        time.Duration
 	batchMax       int
+	maxImageBytes  int64
 	cache          *responseCache
 	metrics        *metricsState
 	video          video.Extractor
 	videoLimits    video.Limits
 	videoMaxBytes  int64
 	videoAvailable bool
+	webhooks       *webhookSender
 	jobs           *jobManager
 }
 
@@ -83,11 +88,12 @@ func newApp(
 	}
 
 	h := &handlers{
-		analyzer: analyzer,
-		checker:  ocrguard.Guard(checker, ocrConcurrency, ocrTimeout),
-		timeout:  analyzeTimeout,
-		batchMax: max(cfg.BatchMaxImages, 1),
-		video:    video.New(cfg.FFmpegPath),
+		analyzer:      analyzer,
+		checker:       ocrguard.Guard(checker, ocrConcurrency, ocrTimeout),
+		timeout:       analyzeTimeout,
+		batchMax:      max(cfg.BatchMaxImages, 1),
+		maxImageBytes: cfg.MaxImageBytes,
+		video:         video.New(cfg.FFmpegPath),
 		videoLimits: video.Limits{
 			FPS:       cfg.VideoSampleFPS,
 			MaxFrames: cfg.VideoMaxFrames,
@@ -95,16 +101,20 @@ func newApp(
 		},
 		videoMaxBytes:  cfg.VideoMaxBytes,
 		videoAvailable: ffmpegAvailable(cfg.FFmpegPath),
-		jobs: newJobManager(baseCtx, jobOptions{
-			Workers:    cfg.JobWorkers,
-			MaxEntries: cfg.JobMaxEntries,
-			TTL:        time.Duration(cfg.JobTTLSeconds) * time.Second,
-		}),
 	}
+	h.webhooks = newWebhookSender(cfg, log)
+	h.jobs = newJobManager(baseCtx, jobOptions{
+		Workers:    cfg.JobWorkers,
+		MaxEntries: cfg.JobMaxEntries,
+		TTL:        time.Duration(cfg.JobTTLSeconds) * time.Second,
+		OnFinish: func(view jobView, callback string) {
+			h.webhooks.deliver(context.Background(), callback, view)
+		},
+	})
 	if cfg.CacheEntries > 0 {
 		h.cache = newResponseCache(cfg.CacheEntries)
 	}
-	h.metrics = newMetricsState(h.cache, h.jobs)
+	h.metrics = newMetricsState(h.cache, h.jobs, h.webhooks)
 	limit := concurrencyLimiter(make(chan struct{}, requestConcurrency))
 	bodyLimit := batchBodyLimit(cfg.MaxImageBytes, h.batchMax)
 	if videoLimit := int(cfg.VideoMaxBytes) + bodyLimitOverhead; videoLimit > bodyLimit {
@@ -366,6 +376,9 @@ type batchResponse struct {
 }
 
 func (h *handlers) picBatch(c fiber.Ctx) error {
+	if strings.HasPrefix(c.Get(fiber.HeaderContentType), fiber.MIMEMultipartForm) {
+		return h.picBatchMultipart(c)
+	}
 	var req batchRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return utils.ReportError(c, err.Error(), fiber.StatusBadRequest)
@@ -385,6 +398,68 @@ func (h *handlers) picBatch(c fiber.Ctx) error {
 		Message: successMessage,
 		Results: h.analyzeBatch(c.Context(), req.Images),
 	})
+}
+
+// picBatchMultipart analyzes one uploaded image per "file" field.
+func (h *handlers) picBatchMultipart(c fiber.Ctx) error {
+	form, err := c.MultipartForm()
+	if err != nil {
+		return utils.ReportError(c, "the multipart form could not be read", fiber.StatusBadRequest)
+	}
+	files := form.File["file"]
+	if len(files) == 0 {
+		return utils.ReportError(c, "no images in the batch", fiber.StatusBadRequest)
+	}
+	if len(files) > h.batchMax {
+		return utils.ReportError(
+			c,
+			fmt.Sprintf("the batch limit is %d images", h.batchMax),
+			fiber.StatusBadRequest,
+		)
+	}
+	sensitivity, ok := sensitivityFromString(c.FormValue("sensitivity"))
+	if !ok {
+		return utils.ReportError(c, sensitivityMessage, fiber.StatusBadRequest)
+	}
+	results := make([]any, len(files))
+	g, gctx := errgroup.WithContext(c.Context())
+	g.SetLimit(min(h.batchMax, requestConcurrency))
+	for i := range files {
+		g.Go(func() error {
+			data, err := readUpload(files[i], h.maxImageBytes)
+			if err != nil {
+				results[i] = utils.ErrorResult(err.Error())
+				return nil
+			}
+			results[i] = h.checkBytes(gctx, data, sensitivity)
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return c.JSON(batchResponse{
+		Status:  "ok",
+		Message: successMessage,
+		Results: results,
+	})
+}
+
+func readUpload(file *multipart.FileHeader, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		limit = bodyLimitFloor
+	}
+	reader, err := file.Open()
+	if err != nil {
+		return nil, errors.New("the upload could not be read")
+	}
+	defer func() { _ = reader.Close() }()
+	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, errors.New("the upload could not be read")
+	}
+	if int64(len(data)) > limit {
+		return nil, errors.New("the image exceeds the size limit")
+	}
+	return data, nil
 }
 
 func (h *handlers) analyzeBatch(ctx context.Context, images []picRequest) []any {
@@ -414,13 +489,17 @@ func (h *handlers) checkOne(ctx context.Context, req picRequest) any {
 	if err != nil {
 		return utils.ErrorResult(err.Error())
 	}
-	key := cacheKey("/pic/check", req.Sensitivity, data)
+	return h.checkBytes(ctx, data, req.Sensitivity)
+}
+
+func (h *handlers) checkBytes(ctx context.Context, data []byte, sensitivity float64) any {
+	key := cacheKey("/pic/check", sensitivity, data)
 	if h.cache != nil {
 		if body, hit := h.cache.get(key); hit {
 			return json.RawMessage(body)
 		}
 	}
-	analysis, err := h.analyzeData(ctx, data, req.Sensitivity)
+	analysis, err := h.analyzeData(ctx, data, sensitivity)
 	if err != nil {
 		return utils.ErrorResult(err.Error())
 	}

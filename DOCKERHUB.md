@@ -80,15 +80,15 @@ Example response from `/pic/analyze`:
 
 The full analysis includes a `verdict` (`sfw`, `suggestive`, or `explicit`) and an `nsfw` score.
 
-The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns one `/pic/check` result per image in `results`.
+The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns one `/pic/check` result per image in `results`. For multipart form data, send one `file` field per image plus an optional `sensitivity` field.
 
 When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
 
 Send a video as a multipart `file` field to `/video/check`; the response holds one analysis per sampled frame and a summary. The image endpoints also accept raw bytes at `/pic/upload`. The Docker image includes ffmpeg.
 
-Large batches and videos can run in the background through `/jobs`: submit, poll `GET /jobs/{id}` for the state and result, and cancel with `DELETE /jobs/{id}`. `GET /jobs` lists the kept jobs with state counts, and `GET /jobs/{id}/events` streams the changes with server-sent events. `JOB_WORKERS`, `JOB_MAX_ENTRIES`, and `JOB_TTL_SECONDS` set the worker count, queue size, and result lifetime; the defaults are 2 workers, 64 jobs, and ten minutes.
+Large batches and videos can run in the background through `/jobs`: submit, poll `GET /jobs/{id}` for the state and result, and cancel with `DELETE /jobs/{id}`. `GET /jobs` lists the kept jobs with state counts, and `GET /jobs/{id}/events` streams the changes with server-sent events. `JOB_WORKERS`, `JOB_MAX_ENTRIES`, and `JOB_TTL_SECONDS` set the worker count, queue size, and result lifetime; the defaults are 2 workers, 64 jobs, and ten minutes. Add `callbackUrl` to the job request to receive the result as an HMAC-signed webhook when the job ends; `WEBHOOK_SECRET`, `WEBHOOK_RETRIES`, and `WEBHOOK_TIMEOUT_SECONDS` control signing and delivery.
 
-Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
+Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`. With `RATE_LIMIT_RPM` set, responses also carry `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`; a 429 adds `Retry-After`.
 
 Errors use this shape:
 
@@ -105,7 +105,7 @@ The [service definition](https://github.com/M1chlCZ/nsfw_sherlock/blob/main/prot
 ### NVIDIA · CUDA
 
 Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Toolkit.
-CUDA images are tagged with a `-cuda` suffix, for example `v1.3.1-cuda` and `latest-cuda`.
+CUDA images are tagged with a `-cuda` suffix, for example `v1.4.0-cuda` and `latest-cuda`.
 
 ```sh
 docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:latest-cuda
@@ -158,6 +158,10 @@ If the selected provider is unavailable, the service stops at startup. Unsupport
 | `JOB_WORKERS` | `2` | Background jobs that run at once (1..32) |
 | `JOB_MAX_ENTRIES` | `64` | Kept background jobs (1..10000) |
 | `JOB_TTL_SECONDS` | `600` | Seconds a finished job stays available (1..86400) |
+| `WEBHOOK_SECRET` | (none) | HMAC-SHA256 key for callback signatures. Empty disables signing. |
+| `WEBHOOK_TIMEOUT_SECONDS` | `10` | Seconds per callback attempt (1..60) |
+| `WEBHOOK_RETRIES` | `3` | Retries after a failed callback attempt (0..10) |
+| `WEBHOOK_ALLOW_PRIVATE` | `false` | Allow callbacks on private and loopback addresses |
 | `FFMPEG_PATH` | `ffmpeg` | ffmpeg binary used by `/video/check` |
 | `VIDEO_SAMPLE_FPS` | `1` | Frames sampled per second (0.1..30) |
 | `VIDEO_MAX_FRAMES` | `24` | Frame cap per video (1..240) |

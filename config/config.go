@@ -32,6 +32,10 @@ const (
 	envJobWorkers      = "JOB_WORKERS"
 	envJobMaxEntries   = "JOB_MAX_ENTRIES"
 	envJobTTLSeconds   = "JOB_TTL_SECONDS"
+	envWebhookSecret   = "WEBHOOK_SECRET"
+	envWebhookTimeout  = "WEBHOOK_TIMEOUT_SECONDS"
+	envWebhookRetries  = "WEBHOOK_RETRIES"
+	envWebhookPrivate  = "WEBHOOK_ALLOW_PRIVATE"
 	envLogLevel        = "LOG_LEVEL"
 	envLogFormat       = "LOG_FORMAT"
 )
@@ -65,6 +69,10 @@ const (
 	maxJobWorkers          = 32
 	maxJobMaxEntries       = 10_000
 	maxJobTTLSeconds       = 86_400
+	defaultWebhookTimeout  = 10
+	maxWebhookTimeout      = 60
+	defaultWebhookRetries  = 3
+	maxWebhookRetries      = 10
 	defaultLogLevel        = "info"
 	defaultLogFormat       = "text"
 )
@@ -92,6 +100,10 @@ type Config struct {
 	JobWorkers      int
 	JobMaxEntries   int
 	JobTTLSeconds   int
+	WebhookSecret   string
+	WebhookTimeout  int
+	WebhookRetries  int
+	WebhookPrivate  bool
 	FFmpegPath      string
 	VideoSampleFPS  float64
 	VideoMaxFrames  int
@@ -121,6 +133,9 @@ func Load(getenv func(string) string) (Config, error) {
 		JobWorkers:      defaultJobWorkers,
 		JobMaxEntries:   defaultJobMaxEntries,
 		JobTTLSeconds:   defaultJobTTLSeconds,
+		WebhookTimeout:  defaultWebhookTimeout,
+		WebhookRetries:  defaultWebhookRetries,
+		WebhookPrivate:  false,
 		FFmpegPath:      defaultFFmpegPath,
 		VideoSampleFPS:  defaultVideoSampleFPS,
 		VideoMaxFrames:  defaultVideoMaxFrames,
@@ -173,6 +188,9 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	if err := cfg.loadJobLimits(getenv); err != nil {
+		return Config{}, err
+	}
+	if err := cfg.loadWebhookSettings(getenv); err != nil {
 		return Config{}, err
 	}
 	if cfg.LogLevel, err = enumFromEnv(
@@ -320,6 +338,37 @@ func (cfg *Config) loadJobLimits(getenv func(string) string) error {
 			cfg.JobTTLSeconds,
 			maxJobTTLSeconds,
 		)
+	}
+	return nil
+}
+
+func (cfg *Config) loadWebhookSettings(getenv func(string) string) error {
+	var err error
+	cfg.WebhookSecret = stringFromEnv(getenv, envWebhookSecret, cfg.WebhookSecret)
+	if cfg.WebhookTimeout, err = intFromEnv(getenv, envWebhookTimeout, cfg.WebhookTimeout); err != nil {
+		return err
+	}
+	if cfg.WebhookTimeout < 1 || cfg.WebhookTimeout > maxWebhookTimeout {
+		return fmt.Errorf(
+			"config: %s: value %d must be in 1..%d",
+			envWebhookTimeout,
+			cfg.WebhookTimeout,
+			maxWebhookTimeout,
+		)
+	}
+	if cfg.WebhookRetries, err = intFromEnv(getenv, envWebhookRetries, cfg.WebhookRetries); err != nil {
+		return err
+	}
+	if cfg.WebhookRetries < 0 || cfg.WebhookRetries > maxWebhookRetries {
+		return fmt.Errorf(
+			"config: %s: value %d must be in 0..%d",
+			envWebhookRetries,
+			cfg.WebhookRetries,
+			maxWebhookRetries,
+		)
+	}
+	if cfg.WebhookPrivate, err = boolFromEnv(getenv, envWebhookPrivate, cfg.WebhookPrivate); err != nil {
+		return err
 	}
 	return nil
 }

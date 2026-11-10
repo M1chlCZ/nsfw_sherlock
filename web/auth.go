@@ -13,9 +13,12 @@ import (
 )
 
 const (
-	authHeaderName  = "X-API-Key"
-	rateLimitWindow = time.Minute
-	maxRateBuckets  = 10_000
+	authHeaderName           = "X-API-Key"
+	rateLimitWindow          = time.Minute
+	maxRateBuckets           = 10_000
+	rateLimitLimitHeader     = "X-Ratelimit-Limit"
+	rateLimitRemainingHeader = "X-Ratelimit-Remaining"
+	rateLimitResetHeader     = "X-Ratelimit-Reset"
 )
 
 func authExempt(c fiber.Ctx) bool {
@@ -58,6 +61,15 @@ type rateBucket struct {
 	count int
 }
 
+// rateDecision is the outcome of one rate-limit check.
+type rateDecision struct {
+	allowed   bool
+	limit     int
+	remaining int
+	reset     time.Time
+	retry     int
+}
+
 func newRateLimiter(limit int, apiKeyAuth bool) *rateLimiter {
 	return &rateLimiter{
 		limit:      limit,
@@ -68,6 +80,12 @@ func newRateLimiter(limit int, apiKeyAuth bool) *rateLimiter {
 }
 
 func (l *rateLimiter) allow(key string, now time.Time) (bool, int) {
+	decision := l.check(key, now)
+	return decision.allowed, decision.retry
+}
+
+// check records one request and reports the current window state.
+func (l *rateLimiter) check(key string, now time.Time) rateDecision {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	bucket, ok := l.buckets[key]
@@ -75,15 +93,18 @@ func (l *rateLimiter) allow(key string, now time.Time) (bool, int) {
 		if len(l.buckets) >= maxRateBuckets {
 			l.prune(now)
 		}
-		l.buckets[key] = &rateBucket{start: now, count: 1}
-		return true, 0
+		bucket = &rateBucket{start: now}
+		l.buckets[key] = bucket
 	}
 	bucket.count++
+	decision := rateDecision{limit: l.limit, reset: bucket.start.Add(l.window)}
 	if bucket.count > l.limit {
-		retry := int(bucket.start.Add(l.window).Sub(now).Seconds()) + 1
-		return false, retry
+		decision.retry = int(decision.reset.Sub(now).Seconds()) + 1
+		return decision
 	}
-	return true, 0
+	decision.allowed = true
+	decision.remaining = l.limit - bucket.count
+	return decision
 }
 
 func (l *rateLimiter) prune(now time.Time) {
@@ -106,9 +127,12 @@ func rateLimitMiddleware(l *rateLimiter) fiber.Handler {
 				key = "k:" + hex.EncodeToString(sum[:])
 			}
 		}
-		ok, retry := l.allow(key, time.Now())
-		if !ok {
-			c.Set("Retry-After", strconv.Itoa(retry))
+		decision := l.check(key, time.Now())
+		c.Set(rateLimitLimitHeader, strconv.Itoa(decision.limit))
+		c.Set(rateLimitRemainingHeader, strconv.Itoa(decision.remaining))
+		c.Set(rateLimitResetHeader, strconv.FormatInt(decision.reset.Unix(), 10))
+		if !decision.allowed {
+			c.Set("Retry-After", strconv.Itoa(decision.retry))
 			return utils.ReportError(c, "rate limit exceeded", fiber.StatusTooManyRequests)
 		}
 		return c.Next()

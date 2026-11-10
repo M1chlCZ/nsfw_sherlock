@@ -27,6 +27,7 @@ type metricsState struct {
 	inflight   int64
 	cache      *responseCache
 	jobs       *jobManager
+	webhooks   *webhookSender
 }
 
 type latencyHistogram struct {
@@ -50,14 +51,18 @@ func (h *latencyHistogram) observe(seconds float64) {
 	h.count++
 }
 
-func newMetricsState(cache *responseCache, jobs *jobManager) *metricsState {
-	return &metricsState{
+func newMetricsState(cache *responseCache, jobs *jobManager, webhooks ...*webhookSender) *metricsState {
+	state := &metricsState{
 		requests:   make(map[string]int64),
 		verdicts:   make(map[string]int64),
 		histograms: make(map[string]*latencyHistogram),
 		cache:      cache,
 		jobs:       jobs,
 	}
+	if len(webhooks) > 0 {
+		state.webhooks = webhooks[0]
+	}
+	return state
 }
 
 func metricsMiddleware(m *metricsState) fiber.Handler {
@@ -157,6 +162,14 @@ func (m *metricsState) render() string {
 	fmt.Fprintf(&b, "nsfw_inflight_requests %d\n", m.inflight)
 	if m.jobs != nil {
 		m.jobs.writeMetrics(&b)
+	}
+	if m.webhooks != nil {
+		b.WriteString("# HELP nsfw_webhook_deliveries_total Finished jobs delivered to callback URLs.\n")
+		b.WriteString("# TYPE nsfw_webhook_deliveries_total counter\n")
+		fmt.Fprintf(&b, "nsfw_webhook_deliveries_total %d\n", m.webhooks.delivered.Load())
+		b.WriteString("# HELP nsfw_webhook_failures_total Callback deliveries that gave up.\n")
+		b.WriteString("# TYPE nsfw_webhook_failures_total counter\n")
+		fmt.Fprintf(&b, "nsfw_webhook_failures_total %d\n", m.webhooks.failed.Load())
 	}
 	return b.String()
 }

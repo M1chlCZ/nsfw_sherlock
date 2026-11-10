@@ -97,8 +97,29 @@ func TestRateLimitMiddleware(t *testing.T) {
 	)
 
 	for i := range 2 {
-		if status, body := postPic(t, app, "/pic/check", payload, "a.png"); status != http.StatusOK {
-			t.Fatalf("request %d status = %d, want 200; body: %s", i+1, status, body)
+		resp, err := app.Test(
+			newJSONRequest(http.MethodPost, "/pic/check", picBody(payload, "a.png")),
+			fiber.TestConfig{Timeout: 5 * time.Second},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("request %d status = %d, want 200", i+1, resp.StatusCode)
+		}
+		if got := resp.Header.Get(rateLimitLimitHeader); got != "2" {
+			t.Errorf("request %d limit header = %q, want 2", i+1, got)
+		}
+		wantRemaining := "1"
+		if i == 1 {
+			wantRemaining = "0"
+		}
+		if got := resp.Header.Get(rateLimitRemainingHeader); got != wantRemaining {
+			t.Errorf("request %d remaining header = %q, want %s", i+1, got, wantRemaining)
+		}
+		if resp.Header.Get(rateLimitResetHeader) == "" {
+			t.Errorf("request %d lacks the reset header", i+1)
 		}
 	}
 	resp, err := app.Test(
@@ -114,6 +135,9 @@ func TestRateLimitMiddleware(t *testing.T) {
 	}
 	if resp.Header.Get("Retry-After") == "" {
 		t.Error("the 429 response lacks the Retry-After header")
+	}
+	if got := resp.Header.Get(rateLimitRemainingHeader); got != "0" {
+		t.Errorf("the 429 remaining header = %q, want 0", got)
 	}
 	if status, _, err := send(app, newJSONRequest(http.MethodGet, "/ping", "")); err != nil || status != http.StatusOK {
 		t.Fatalf("/ping status = %d, err = %v, want 200 outside the limit", status, err)

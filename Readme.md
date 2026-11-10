@@ -96,6 +96,13 @@ The batch endpoint accepts `{"images":[<the request above>, ...]}` and returns `
 Each result is a `/pic/check` body or the error body.
 The default limit is 4 images.
 
+Send multipart form data instead with one `file` field per image and an optional `sensitivity` field for the whole batch:
+
+```sh
+curl -fsS -F "file=@first.jpg" -F "file=@second.jpg" -F "sensitivity=1.5" \
+  http://localhost:4000/pic/batch
+```
+
 When `CACHE_ENTRIES` is greater than 0, the service stores responses for identical image bytes and returns them again without running the models.
 
 ### Video scanning
@@ -116,6 +123,9 @@ the endpoint answers 503. Uploads are limited to `VIDEO_MAX_BYTES` and the
 whole scan stops after 120 seconds.
 
 Every response carries an `X-Request-ID` header. JSON logs repeat it as `requestId`.
+With `RATE_LIMIT_RPM` set, limited responses also carry `X-RateLimit-Limit`,
+`X-RateLimit-Remaining`, and `X-RateLimit-Reset` (Unix seconds); a 429 adds
+`Retry-After`.
 
 ### Async jobs
 
@@ -131,6 +141,36 @@ curl -fsS -F "file=@clip.mp4" http://localhost:4000/jobs
 The service answers 202 with a job id. Poll `GET /jobs/{id}` for the state
 (`queued`, `running`, `done`, `failed` or `canceled`) and the result.
 `DELETE /jobs/{id}` cancels a queued job or a running analysis.
+
+### Job callbacks
+
+Add `callbackUrl` to a batch job, or a `callbackUrl` form field to a video
+job, to receive the result without polling:
+
+```sh
+curl -fsS -X POST http://localhost:4000/jobs \
+  -H "Content-Type: application/json" \
+  -d '{"images":[...],"callbackUrl":"https://example.com/hooks/nsfw"}'
+curl -fsS -F "file=@clip.mp4" -F "callbackUrl=https://example.com/hooks/nsfw" \
+  http://localhost:4000/jobs
+```
+
+When the job reaches `done` or `failed`, the service posts this JSON body to
+the callback URL:
+
+```json
+{"event":"job.finished","job":{...the same shape as GET /jobs/{id}...}}
+```
+
+The request carries `X-NSFW-Event`, `X-NSFW-Job-ID`, and, when
+`WEBHOOK_SECRET` is set, `X-NSFW-Timestamp` and `X-NSFW-Signature`. The
+signature is `sha256=` followed by the hex HMAC-SHA256 of
+`<timestamp>.<body>` with the secret as the key.
+
+Callbacks retry on network errors and non-2xx answers. `WEBHOOK_RETRIES` sets
+the number of retries after the first attempt, and `WEBHOOK_TIMEOUT_SECONDS`
+bounds each attempt. Redirects are not followed. Private, loopback, and
+link-local addresses are rejected unless `WEBHOOK_ALLOW_PRIVATE=true`.
 
 `GET /jobs` lists the kept jobs newest first. Pass `state` to filter
 (`queued`, `running`, `done`, `failed` or `canceled`) and `limit` to cap the
@@ -153,8 +193,9 @@ are 2 workers, 64 jobs, and 600 seconds.
 The `nsfw_request_duration_seconds` histogram carries an `endpoint` label.
 The `/metrics` output also includes `nsfw_jobs_submitted_total`,
 `nsfw_jobs_rejected_total`, `nsfw_jobs_current`, `nsfw_jobs_finished_total`,
-and `nsfw_job_duration_seconds`. `GET /ready` reports whether video scanning is
-available.
+and `nsfw_job_duration_seconds`. Callback delivery counters are
+`nsfw_webhook_deliveries_total` and `nsfw_webhook_failures_total`.
+`GET /ready` reports whether video scanning is available.
 
 The gRPC service exposes `Detect`, `DetectLabels`, and `Analyze`.
 It also serves the standard gRPC health service and server reflection.
@@ -168,7 +209,7 @@ Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Tool
 Then run the CUDA image:
 
 ```sh
-docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.3.1-cuda
+docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.4.0-cuda
 ```
 
 This image supports Linux amd64. It includes ONNX Runtime 1.29.0, CUDA 12, and cuDNN.
@@ -232,6 +273,10 @@ The v1.0.5 Linux amd64 binary passed a physical CUDA test on an RTX 5070 Ti unde
 | `JOB_WORKERS` | `2` | Background jobs that run at once (1..32) |
 | `JOB_MAX_ENTRIES` | `64` | Kept background jobs (1..10000) |
 | `JOB_TTL_SECONDS` | `600` | Seconds a finished job stays available (1..86400) |
+| `WEBHOOK_SECRET` | (none) | HMAC-SHA256 key for callback signatures. Empty disables signing. |
+| `WEBHOOK_TIMEOUT_SECONDS` | `10` | Seconds per callback attempt (1..60) |
+| `WEBHOOK_RETRIES` | `3` | Retries after a failed callback attempt (0..10) |
+| `WEBHOOK_ALLOW_PRIVATE` | `false` | Allow callback URLs on private and loopback addresses |
 | `FFMPEG_PATH` | `ffmpeg` | ffmpeg binary used by `/video/check` |
 | `VIDEO_SAMPLE_FPS` | `1` | Frames sampled per second (0.1..30) |
 | `VIDEO_MAX_FRAMES` | `24` | Frame cap per video (1..240) |
