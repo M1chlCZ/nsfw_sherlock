@@ -7,7 +7,7 @@ require (
 	github.com/otiai10/gosseract/v2 v2.4.1
 	github.com/yalue/onnxruntime_go v1.38.0
 	golang.org/x/image v0.47.0
-	golang.org/x/sync v0.24.0
+	golang.org/x/sync v0.25.0
 	google.golang.org/grpc v1.86.0-dev
 	google.golang.org/protobuf v1.36.12
 )

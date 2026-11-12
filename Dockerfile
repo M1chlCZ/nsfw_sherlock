@@ -1,5 +1,5 @@
 ARG RUNTIME_IMAGE=debian:bookworm-slim
-FROM --platform=$BUILDPLATFORM python:3.12-slim AS models
+FROM --platform=$BUILDPLATFORM python:3.14-slim AS models
 
 ARG MODELS_BASE_URL=""
 
