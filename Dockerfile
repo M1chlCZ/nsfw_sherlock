@@ -39,28 +39,32 @@ FROM ${RUNTIME_IMAGE} AS runtime
 ARG TARGETARCH
 ARG ORT_VARIANT=cpu
 ARG ORT_PROVIDER=cpu
-ARG ORT_SHA256_AMD64=c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9
-ARG ORT_SHA256_ARM64=5317505e2da99be65f8e2775ba3c2afd6d2961fd78aba1bd8f56159f48820c78
-ARG ORT_SHA256_CUDA12=57cd51f677eca19a269cdba31b0c16c15d73a8feea41f170aa8b750447ab1f70
+ARG ORT_VERSION=1.31.1
+ARG ORT_WHEEL_AMD64=https://files.pythonhosted.org/packages/eb/27/c6a823bac55b2977bea2027c3ec9393a2c1002cb9a09eb40354563e02730/onnxruntime-1.31.1-cp312-cp312-manylinux_2_28_x86_64.whl
+ARG ORT_WHEEL_ARM64=https://files.pythonhosted.org/packages/ba/e4/1ed1a7a5f4702d899091fa2b976d377995250c307326ec8dc9ae6378aa13/onnxruntime-1.31.1-cp312-cp312-manylinux_2_28_aarch64.whl
+ARG ORT_WHEEL_CUDA13=https://files.pythonhosted.org/packages/22/97/9531b4d9e566cf2a0f04b4b5c26a3bc0ef2e2e0b6bc943a02c0eead98cf7/onnxruntime_gpu-1.31.1-cp312-cp312-manylinux_2_28_x86_64.whl
+ARG ORT_SHA256_AMD64=1f3dea47f2f0e5117c2404cea7d21fd253ae7836a3bf167a501cdfbb2600d536
+ARG ORT_SHA256_ARM64=0b9a492176886992e0e875f06bc0367e333f5fff11711a2d642e18b02f3009cc
+ARG ORT_SHA256_CUDA13=05d548956197b9d01f59b625de740e0d6be3593f874e241a12dc0362650ecdf7
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl ffmpeg libtesseract5 liblept5 tesseract-ocr tesseract-ocr-eng \
+        ca-certificates curl ffmpeg libtesseract5 liblept5 tesseract-ocr tesseract-ocr-eng unzip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
     case "$arch/$ORT_VARIANT" in \
-      amd64/cpu) ort_arch=x64; ort_sha="$ORT_SHA256_AMD64" ;; \
-      arm64/cpu) ort_arch=aarch64; ort_sha="$ORT_SHA256_ARM64" ;; \
-      amd64/cuda12) ort_arch=x64-gpu_cuda12; ort_sha="$ORT_SHA256_CUDA12" ;; \
+      amd64/cpu) ort_url="$ORT_WHEEL_AMD64"; ort_sha="$ORT_SHA256_AMD64" ;; \
+      arm64/cpu) ort_url="$ORT_WHEEL_ARM64"; ort_sha="$ORT_SHA256_ARM64" ;; \
+      amd64/cuda13) ort_url="$ORT_WHEEL_CUDA13"; ort_sha="$ORT_SHA256_CUDA13" ;; \
       *) echo "unsupported architecture/runtime: $arch/$ORT_VARIANT" >&2; exit 1 ;; \
     esac \
-    && curl -fsSL -o /tmp/ort.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-${ort_arch}-1.31.1.tgz" \
-    && printf '%s  %s\n' "$ort_sha" /tmp/ort.tgz | sha256sum -c - \
-    && tar -xzf /tmp/ort.tgz -C /tmp \
+    && curl -fsSL -o /tmp/ort.whl "$ort_url" \
+    && printf '%s  %s\n' "$ort_sha" /tmp/ort.whl | sha256sum -c - \
     && mkdir -p /app/lib \
-    && cp -P "/tmp/onnxruntime-linux-${ort_arch}-1.31.1/lib/"*.so* /app/lib/ \
-    && rm -rf /tmp/ort.tgz "/tmp/onnxruntime-linux-${ort_arch}-1.31.1"
+    && unzip -j -o /tmp/ort.whl 'onnxruntime/capi/libonnxruntime*.so*' -d /app/lib \
+    && ln -sf "libonnxruntime.so.${ORT_VERSION}" /app/lib/libonnxruntime.so \
+    && rm -f /tmp/ort.whl
 
 RUN useradd -r -u 10001 appuser
 

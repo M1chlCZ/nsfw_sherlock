@@ -31,10 +31,10 @@ jobs:
             platforms: linux/amd64,linux/arm64
             runtime-image: debian:bookworm-slim
             provider: cpu
-          - variant: cuda12
+          - variant: cuda13
             suffix: -cuda
             platforms: linux/amd64
-            runtime-image: nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04
+            runtime-image: nvidia/cuda:13.0.3-cudnn-runtime-ubuntu24.04
             provider: cuda
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
