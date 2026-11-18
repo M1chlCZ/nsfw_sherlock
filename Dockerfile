@@ -1,5 +1,5 @@
 ARG RUNTIME_IMAGE=debian:bookworm-slim
-FROM --platform=$BUILDPLATFORM python:3.12-slim AS models
+FROM --platform=$BUILDPLATFORM python:3.15-slim AS models
 
 ARG MODELS_BASE_URL=""
 
@@ -20,7 +20,7 @@ RUN if [ -n "$MODELS_BASE_URL" ]; then \
     fi \
     && bash scripts/fetch-models.sh --dir /models --manifest /models/manifest.json
 
-FROM golang:1.27.3-bookworm AS builder
+FROM golang:1.27.4-bookworm AS builder
 
 ARG VERSION=dev
 
