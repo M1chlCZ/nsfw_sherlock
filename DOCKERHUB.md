@@ -104,14 +104,14 @@ The [service definition](https://github.com/M1chlCZ/nsfw_sherlock/blob/main/prot
 
 ### NVIDIA · CUDA
 
-Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Toolkit.
+Install an NVIDIA driver compatible with CUDA 13.0 and the NVIDIA Container Toolkit.
 CUDA images are tagged with a `-cuda` suffix, for example `v1.4.1-cuda` and `latest-cuda`.
 
 ```sh
 docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:latest-cuda
 ```
 
-This image supports Linux amd64. It includes ONNX Runtime 1.29.0, CUDA 12, and cuDNN.
+This image supports Linux amd64. It includes ONNX Runtime 1.31.1, CUDA 13, and cuDNN.
 `ORT_DEVICE_ID` selects the GPU index, with `0` as the default.
 
 ### AMD · ROCm / MIGraphX

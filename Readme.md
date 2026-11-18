@@ -205,14 +205,14 @@ The [service definition](proto/nsfw.proto) contains the request and response typ
 
 ### NVIDIA · CUDA
 
-Install an NVIDIA driver compatible with CUDA 12.9 and the NVIDIA Container Toolkit.
+Install an NVIDIA driver compatible with CUDA 13.0 and the NVIDIA Container Toolkit.
 Then run the CUDA image:
 
 ```sh
 docker run --gpus all -p 4000:4000 m1chl/nsfw-sherlock:v1.4.1-cuda
 ```
 
-This image supports Linux amd64. It includes ONNX Runtime 1.29.0, CUDA 12, and cuDNN.
+This image supports Linux amd64. It includes ONNX Runtime 1.31.1, CUDA 13, and cuDNN.
 `ORT_DEVICE_ID` selects the GPU index, with `0` as the default.
 
 ### AMD · ROCm / MIGraphX
@@ -241,7 +241,7 @@ OpenVINO runs on an Intel CPU or GPU.
 
 If the selected provider is unavailable, the service stops at startup.
 Unsupported operators can still use the CPU.
-The v1.0.5 Linux amd64 binary passed a physical CUDA test on an RTX 5070 Ti under WSL2, with ONNX Runtime 1.29.0, CUDA 13 and cuDNN 9.24. See the [test setup, results and reproduction client](https://gist.github.com/M1chlCZ/35c5a7b94e729b8a6e9403b739981c79). This test does not cover the CUDA 12 Docker image, AMD/MIGraphX, TensorRT or OpenVINO.
+The v1.0.5 Linux amd64 binary passed a physical CUDA test on an RTX 5070 Ti under WSL2, with ONNX Runtime 1.29.0, CUDA 13 and cuDNN 9.24. See the [test setup, results and reproduction client](https://gist.github.com/M1chlCZ/35c5a7b94e729b8a6e9403b739981c79). This test does not cover the CUDA 13 Docker image, AMD/MIGraphX, TensorRT or OpenVINO.
 
 ## Configuration
 
